@@ -2,8 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "build",
-    "verbatimModuleSyntax": false,
-    "baseUrl": "src"
+    "verbatimModuleSyntax": false
   },
   "include": ["src/**/*"]
 }

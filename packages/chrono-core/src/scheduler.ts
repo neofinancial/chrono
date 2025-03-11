@@ -9,13 +9,17 @@ export class Scheduler {
     this.#tasks = [];
   }
 
-  public schedule(task: Task) {
+  public async schedule(task: Task) {
     this.#tasks.push(task);
+
+    return true;
   }
 
-  public run() {
+  public async run() {
     for (const task of this.#tasks) {
       task.run();
     }
+
+    return true;
   }
 }
