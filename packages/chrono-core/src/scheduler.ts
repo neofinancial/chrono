@@ -14,6 +14,8 @@ export class Scheduler {
   }
 
   public run() {
-    this.#tasks.forEach((task) => task.run());
+    for (const task of this.#tasks) {
+      task.run();
+    }
   }
 }
