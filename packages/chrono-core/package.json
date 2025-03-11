@@ -6,7 +6,8 @@
   "types": "build/index.d.ts",
   "files": ["build/**"],
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "typecheck": "tsc -p ./tsconfig.json"
   },
   "keywords": [],
   "author": "Neo Financial Engineering <engineering@neofinancial.com>",
