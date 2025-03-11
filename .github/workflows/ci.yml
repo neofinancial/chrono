@@ -11,44 +11,22 @@ env:
 
 jobs:
   build:
-    runs-on: neo-x86-small
+    runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
       - name: Perform source code checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-      - run: git fetch --prune
-      - name: Setup Node version
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node }}
-      - name: Cache mongo memory server
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/mongodb-binaries
-          key: ${{ runner.os }}-node-mongodb
-          restore-keys: |
-            ${{ runner.os }}-node-mongodb
-
-      - name: Cache Root Node Modules
-        uses: actions/cache@v4
-        with:
-          path: node_modules
-          key: root-modules.${{ matrix.node }}.${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            root-modules.${{ matrix.node }}
-            root-modules.
+          node-version: ${{ env.NODE_VERSION }}
 
       - name: Cache Package Node Modules
         uses: actions/cache@v4
         with:
           path: |
             packages/*/node_modules
-          key: modules.${{ matrix.node }}.${{ hashFiles('**/package-lock.json') }}
+          key: modules.${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
-            modules.${{ matrix.node }}
             modules.
 
       - name: Install
