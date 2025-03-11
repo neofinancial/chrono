@@ -1,0 +1,16 @@
+{
+  "name": "@neofinancial/chrono-core",
+  "version": "1.0.0",
+  "description": "",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "files": [
+    "build/**"
+  ],
+  "scripts": {
+    "build": "tsc"
+  },
+  "keywords": [],
+  "author": "Neo Financial Engineering <engineering@neofinancial.com>",
+  "license": "MIT"
+}
