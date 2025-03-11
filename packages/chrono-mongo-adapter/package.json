@@ -6,7 +6,8 @@
   "types": "build/index.d.ts",
   "files": ["build/**"],
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "typecheck": "tsc -p ./tsconfig.json "
   },
   "dependencies": {
     "@neofinancial/chrono-core": "workspace:*"
