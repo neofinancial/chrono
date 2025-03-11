@@ -7,7 +7,8 @@
   "files": ["build/**"],
   "scripts": {
     "build": "tsc",
-    "typecheck": "tsc -p ./tsconfig.json"
+    "typecheck": "tsc -p ./tsconfig.json --noEmit",
+    "test": "NODE_ENV=test TZ=UTC vitest run"
   },
   "dependencies": {
     "@neofinancial/chrono-core": "workspace:*"
