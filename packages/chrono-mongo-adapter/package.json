@@ -1,0 +1,19 @@
+{
+  "name": "@neofinancial/chrono-mongo-adapter",
+  "version": "1.0.0",
+  "description": "",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "files": [
+    "build/**"
+  ],
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@neofinancial/chrono-core": "workspace:*"
+  },
+  "keywords": [],
+  "author": "Neo Financial Engineering <engineering@neofinancial.com>",
+  "license": "MIT"
+}
