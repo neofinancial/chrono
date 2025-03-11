@@ -2,6 +2,7 @@
   "name": "@neofinancial/chrono-core",
   "version": "1.0.0",
   "description": "",
+  "type": "module",
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "files": ["build/**"],
