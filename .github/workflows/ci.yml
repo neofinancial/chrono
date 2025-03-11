@@ -1,12 +1,14 @@
 name: CI
+
 on:
   pull_request:
     types: ["opened", "reopened", "synchronize"]
   push:
     branches: ["master"]
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 20
+
 jobs:
   build:
     runs-on: neo-x86-small
@@ -14,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: [22]
+        node: [20]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,17 +59,21 @@ jobs:
           npm install -g npm@^10.9.0
           npm install -g pnpm@latest-10
           NODE_OPTIONS="--max_old_space_size=16384" PUPPETEER_SKIP_DOWNLOAD=true pnpm install
+
       - name: Type check
         run: pnpm run typecheck
+
       - name: Check
         run: pnpm run check
       - name: Format
         run: pnpm run format
       - name: Lint
         run: pnpm run lint
+
       - name: Build
         run: pnpm run build
         if: github.ref != 'refs/heads/master'
+
       - name: Test
         run: pnpm test
         if: github.ref != 'refs/heads/master'

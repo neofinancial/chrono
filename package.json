@@ -2,8 +2,8 @@
   "name": "root",
   "description": "Monorepo for chrono packages",
   "engines": {
-    "node": ">=22.14.0",
-    "npm": ">=10.9.2"
+    "node": ">=20.18.3",
+    "npm": ">=11.2.0"
   },
   "scripts": {
     "clean": "pnpm --recursive run clean",
