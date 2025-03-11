@@ -9,12 +9,12 @@ concurrency:
   cancel-in-progress: true
 jobs:
   build:
-    runs-on: neo-x86-2xl-dind
+    runs-on: neo-x86-small
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        node: [18, 20]
+        node: [22]
     steps:
       - uses: actions/checkout@v4
         with:
