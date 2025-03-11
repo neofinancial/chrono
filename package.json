@@ -6,6 +6,7 @@
     "npm": ">=10.9.2"
   },
   "scripts": {
+    "clean": "pnpm --recursive run clean",
     "build": "pnpm --recursive run build",
     "typecheck": "pnpm --recursive run typecheck",
     "check": "biome check",
@@ -22,6 +23,7 @@
     "@biomejs/biome": "^1.9.4",
     "@types/node": "^22.13.10",
     "husky": "^9.1.7",
+    "rimraf": "^6.0.1",
     "typescript": "^5.8.2",
     "vitest": "^3.0.8",
     "vitest-mock-extended": "^3.0.1"
