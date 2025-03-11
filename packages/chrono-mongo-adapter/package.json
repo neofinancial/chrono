@@ -7,7 +7,7 @@
   "files": ["build/**"],
   "scripts": {
     "build": "tsc",
-    "typecheck": "tsc -p ./tsconfig.json "
+    "typecheck": "tsc -p ./tsconfig.json"
   },
   "dependencies": {
     "@neofinancial/chrono-core": "workspace:*"
