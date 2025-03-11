@@ -1,0 +1,73 @@
+name: CI
+on:
+  pull_request:
+    types: ["opened", "reopened", "synchronize"]
+  push:
+    branches: ["master"]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: neo-x86-2xl-dind
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 20]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: |
+          git fetch --prune
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Cache mongo memory server
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: ${{ runner.os }}-node-mongodb
+          restore-keys: |
+            ${{ runner.os }}-node-mongodb
+
+      - name: Cache Root Node Modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: root-modules.${{ matrix.node }}.${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            root-modules.${{ matrix.node }}
+            root-modules.
+
+      - name: Cache Package Node Modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            packages/*/node_modules
+          key: modules.${{ matrix.node }}.${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            modules.${{ matrix.node }}
+            modules.
+
+      - name: Install
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
+          npm install -g npm@^10.9.0
+          npm install -g pnpm@latest-10
+          NODE_OPTIONS="--max_old_space_size=16384" PUPPETEER_SKIP_DOWNLOAD=true pnpm install
+      - name: Type check
+        run: pnpm run typecheck
+      - name: Check
+        run: pnpm run check
+      - name: Format
+        run: pnpm run format
+      - name: Lint
+        run: pnpm run lint
+      - name: Build
+        run: pnpm run build
+        if: github.ref != 'refs/heads/master'
+      - name: Test
+        run: pnpm test
+        if: github.ref != 'refs/heads/master'
