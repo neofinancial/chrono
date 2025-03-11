@@ -31,7 +31,6 @@ jobs:
 
       - name: Install
         run: |
-          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
           npm install -g npm@^10.9.0
           npm install -g pnpm@latest-10
           NODE_OPTIONS="--max_old_space_size=16384" PUPPETEER_SKIP_DOWNLOAD=true pnpm install
