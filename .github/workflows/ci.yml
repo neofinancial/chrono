@@ -38,6 +38,10 @@ jobs:
           npm install -g pnpm@latest-10
           NODE_OPTIONS="--max_old_space_size=16384" PUPPETEER_SKIP_DOWNLOAD=true pnpm install
 
+      - name: Build
+        run: pnpm run build
+        if: github.ref != 'refs/heads/master'
+
       - name: Type check
         run: pnpm run typecheck
 
@@ -47,10 +51,6 @@ jobs:
         run: pnpm run format
       - name: Lint
         run: pnpm run lint
-
-      - name: Build
-        run: pnpm run build
-        if: github.ref != 'refs/heads/master'
 
       - name: Test
         run: pnpm test
