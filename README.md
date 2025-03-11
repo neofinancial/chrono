@@ -11,5 +11,11 @@ Monorepo for @neofinancial/chrono packages and supporting libraries.
 
 ```sh
 pnpm install
-pnpm --recursive run build
+pnpm build
+```
+
+## Test
+
+```sh
+pnpm test
 ```
