@@ -3,7 +3,7 @@
   "description": "Monorepo for chrono packages",
   "engines": {
     "node": ">=20.18.3",
-    "npm": ">=11.2.0"
+    "pnpm": ">=10.6.2"
   },
   "scripts": {
     "clean": "pnpm --recursive run clean",
@@ -18,7 +18,7 @@
   "keywords": [],
   "author": "Neo Financial Engineering <engineering@neofinancial.com>",
   "license": "MIT",
-  "packageManager": "pnpm@9.5.0+sha1.8c155dc114e1689d18937974f6571e0ceee66f1d",
+  "packageManager": "pnpm@10.6.2",
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "@types/node": "20.17.24",
