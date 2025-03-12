@@ -11,7 +11,7 @@
     "typecheck": "pnpm --recursive run typecheck",
     "check": "biome check",
     "format": "biome format --write",
-    "lint": "biome lint --write",
+    "lint": "biome lint",
     "prepare": "husky",
     "test": "pnpm --recursive run test"
   },
@@ -21,7 +21,7 @@
   "packageManager": "pnpm@9.5.0+sha1.8c155dc114e1689d18937974f6571e0ceee66f1d",
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
-    "@types/node": "^22.13.10",
+    "@types/node": "20.17.24",
     "husky": "^9.1.7",
     "rimraf": "^6.0.1",
     "typescript": "^5.8.2",

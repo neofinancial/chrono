@@ -34,9 +34,9 @@ jobs:
 
       - name: Install
         run: |
-          npm install -g npm@^10.9.0
+          npm install -g npm@^11.2.0
           npm install -g pnpm@latest-10
-          NODE_OPTIONS="--max_old_space_size=16384" PUPPETEER_SKIP_DOWNLOAD=true pnpm install
+          pnpm install
 
       - name: Build
         run: pnpm run build
@@ -47,8 +47,6 @@ jobs:
 
       - name: Check
         run: pnpm run check
-      - name: Format
-        run: pnpm run format
       - name: Lint
         run: pnpm run lint
 
