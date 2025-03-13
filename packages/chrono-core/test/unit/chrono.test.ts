@@ -15,15 +15,15 @@ describe('Chrono', () => {
   const chrono = new Chrono<TaskKind, DatastoreOptions>(mockDatastore);
 
   describe('scheduleTask', () => {
-    test('schedule a task successfully', async () => {
-      const mockScheduleInput: Task<TaskKind, TaskData> = {
-        id: faker.string.nanoid(),
-        kind: 'send-test-task',
-        status: 'pending',
-        data: { someField: 1 },
-        scheduledAt: faker.date.future(),
-      };
+    const mockScheduleInput: Task<TaskKind, TaskData> = {
+      id: faker.string.nanoid(),
+      kind: 'send-test-task',
+      status: 'pending',
+      data: { someField: 1 },
+      scheduledAt: faker.date.future(),
+    };
 
+    test('schedule a task successfully', async () => {
       mockDatastore.schedule.mockResolvedValueOnce(mockScheduleInput);
 
       const result = await chrono.scheduleTask({
@@ -35,15 +35,24 @@ describe('Chrono', () => {
       expect(result).toEqual(mockScheduleInput);
     });
 
-    test('emits task-scheduled event successfully', async () => {
-      const mockScheduleInput: Task<TaskKind, TaskData> = {
-        id: faker.string.nanoid(),
-        kind: 'send-test-task',
-        status: 'pending',
-        data: { someField: 1 },
-        scheduledAt: faker.date.future(),
-      };
+    test('calls datastore.schedule successfully', async () => {
+      mockDatastore.schedule.mockResolvedValueOnce(mockScheduleInput);
 
+      await chrono.scheduleTask({
+        when: mockScheduleInput.scheduledAt,
+        kind: mockScheduleInput.kind,
+        data: mockScheduleInput.data,
+      });
+
+      expect(mockDatastore.schedule).toHaveBeenCalledOnce();
+      expect(mockDatastore.schedule).toHaveBeenCalledWith({
+        when: mockScheduleInput.scheduledAt,
+        kind: mockScheduleInput.kind,
+        data: mockScheduleInput.data,
+      });
+    });
+
+    test('emits task-scheduled event successfully', async () => {
       mockDatastore.schedule.mockResolvedValueOnce(mockScheduleInput);
 
       const emitSpy = vitest.spyOn(chrono, 'emit');
