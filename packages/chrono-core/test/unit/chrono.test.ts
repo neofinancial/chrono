@@ -2,8 +2,8 @@ import { faker } from '@faker-js/faker';
 import { describe, expect, test, vitest } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 
-import type { Datastore, Task } from '../../src/chrono';
 import { Chrono } from '../../src/chrono';
+import type { Datastore, Task } from '../../src/datastore';
 
 describe('Chrono', () => {
   type TaskKind = 'send-test-task';
