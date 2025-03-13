@@ -14,6 +14,17 @@ describe('Chrono', () => {
 
   const chrono = new Chrono<TaskKind, DatastoreOptions>(mockDatastore);
 
+  describe('initialize', () => {
+    test('emits ready event when chrono is instantiated successfully', async () => {
+      const emitSpy = vitest.spyOn(chrono, 'emit');
+
+      await chrono.initialize();
+
+      expect(emitSpy).toHaveBeenCalledOnce();
+      expect(emitSpy).toHaveBeenCalledWith('ready', { timestamp: expect.any(Date) });
+    });
+  });
+
   describe('scheduleTask', () => {
     const mockScheduleInput: Task<TaskKind, TaskData> = {
       id: faker.string.nanoid(),

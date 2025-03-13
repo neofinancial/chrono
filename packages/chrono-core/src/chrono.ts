@@ -34,8 +34,13 @@ export class Chrono<TaskKind, DatastoreOptions> extends EventEmitter {
     super();
 
     this.#datastore = datastore;
+  }
 
-    this.emit('instantiated', { timestamp: new Date() });
+  public async initialize(): Promise<void> {
+    // Emit ready event when the instance is ready.
+    // This is useful for consumers to know when the instance is ready to accept tasks.
+    // In the future, we might want to add more initialization logic here, like ensuring the datastore is connected.
+    this.emit('ready', { timestamp: new Date() });
   }
 
   public async scheduleTask<TaskData>(
