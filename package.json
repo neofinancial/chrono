@@ -2,8 +2,15 @@
   "name": "root",
   "description": "Monorepo for chrono packages",
   "engines": {
+<<<<<<< HEAD
     "node": ">=20.18.3",
     "pnpm": ">=10.6.2"
+=======
+    "node": ">=22.14.0",
+    "npm": "use pnpm",
+    "pnpm": ">=9.5.0",
+    "yarn": "use pnpm"
+>>>>>>> d3e24aa (create example in memory and work on define implementation)
   },
   "scripts": {
     "clean": "pnpm --recursive run clean",
