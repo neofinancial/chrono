@@ -1,0 +1,21 @@
+{
+  "name": "chrono-in-memory-datastore",
+  "version": "1.0.0",
+  "description": "",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "files": [
+    "build/**"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc -p ./tsconfig.json --noEmit",
+    "test": "NODE_ENV=test TZ=UTC vitest run"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@neofinancial/chrono-core": "workspace:*"
+  }
+}

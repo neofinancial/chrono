@@ -3,7 +3,9 @@
   "description": "Monorepo for chrono packages",
   "engines": {
     "node": ">=22.14.0",
-    "npm": ">=10.9.2"
+    "npm": "use pnpm",
+    "pnpm": ">=9.5.0",
+    "yarn": "use pnpm"
   },
   "scripts": {
     "clean": "pnpm --recursive run clean",
