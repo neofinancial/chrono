@@ -41,15 +41,21 @@ export class Chrono<TaskKind, DatastoreOptions> extends EventEmitter {
   public async scheduleTask<TaskData>(
     input: ScheduleTaskInput<TaskKind, TaskData, DatastoreOptions>,
   ): Promise<Task<TaskKind, TaskData>> {
-    const task = await this.#datastore.schedule({
-      when: input.when,
-      kind: input.kind,
-      data: input.data,
-      datastoreOptions: input.datastoreOptions,
-    });
+    try {
+      const task = await this.#datastore.schedule({
+        when: input.when,
+        kind: input.kind,
+        data: input.data,
+        datastoreOptions: input.datastoreOptions,
+      });
 
-    this.emit('task-scheduled', { task, timestamp: new Date() });
+      this.emit('task-scheduled', { task, timestamp: new Date() });
 
-    return task;
+      return task;
+    } catch (error) {
+      this.emit('task-schedule-failed', { error, input, timestamp: new Date() });
+
+      throw error;
+    }
   }
 }
