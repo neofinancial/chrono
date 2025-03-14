@@ -9,6 +9,12 @@ export type Task<TaskKind, TaskData> = {
   status: TaskStatus;
   /** The payload or data associated with the task */
   data: TaskData;
+  /** The priority level of the task (lower numbers can indicate higher priority) */
+  priority?: number;
+  /** A key used for idempotency to prevent duplicate processing */
+  idempotencyKey?: string;
+  /** The original scheduled date when the task was first intended to run */
+  originalScheduleDate: Date;
   /** The current scheduled execution date, which may change if rescheduled */
   scheduledAt: Date;
 };
