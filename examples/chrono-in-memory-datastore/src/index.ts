@@ -1,12 +1,5 @@
-import type {
-  ClaimInput,
-  CompleteInput,
-  DataStore,
-  ScheduleInput,
-  Task,
-  UnClaimInput,
-} from "@neofinancial/chrono-core";
 import { randomUUID } from "node:crypto";
+import type { Datastore, ScheduleInput, Task } from "@neofinancial/chrono-core";
 
 interface ChronoInMemoryDataStoreOptions {
   // In-memory data store options
@@ -14,22 +7,21 @@ interface ChronoInMemoryDataStoreOptions {
 }
 
 export class ChronoInMemoryDataStore
-  implements DataStore<ChronoInMemoryDataStoreOptions>
+  implements Datastore<ChronoInMemoryDataStoreOptions>
 {
-  private store: Map<string, Task<object>> = new Map();
+  private store: Map<string, Task<any, object>> = new Map();
 
   schedule(
-    input: ScheduleInput<object>,
+    input: ScheduleInput<any, object, any>,
     _options: ChronoInMemoryDataStoreOptions
-  ): Promise<Task<object>> {
+  ): Promise<Task<any, object>> {
     const id = randomUUID();
-    const task: Task<object> = {
+    const task: Task<any, object> = {
       id,
       type: input.type,
       data: input.data,
       priority: input.priority || 20,
-      status: "PENDING",
-      scheduledAt: input.scheduledAt,
+      status: "pending",
       retryCount: 0,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -86,17 +78,5 @@ export class ChronoInMemoryDataStore
     this.store.set(task.id, updatedTask);
 
     return Promise.resolve(updatedTask);
-  }
-  unclaim(
-    input: UnClaimInput,
-    options: ChronoInMemoryDataStoreOptions
-  ): Promise<Task<object> | undefined> {
-    throw new Error("Method not implemented.");
-  }
-  complete(
-    input: CompleteInput,
-    options: ChronoInMemoryDataStoreOptions
-  ): Promise<Task<object>> {
-    throw new Error("Method not implemented.");
   }
 }
