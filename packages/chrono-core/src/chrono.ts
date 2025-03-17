@@ -2,7 +2,11 @@ import { EventEmitter } from 'node:stream';
 
 import type { Datastore, ScheduleInput, Task } from './datastore';
 
-type ScheduleTaskInput<TaskKind, TaskData, DatastoreOptions> = ScheduleInput<TaskKind, TaskData, DatastoreOptions>;
+export type ScheduleTaskInput<TaskKind, TaskData, DatastoreOptions> = ScheduleInput<
+  TaskKind,
+  TaskData,
+  DatastoreOptions
+>;
 
 export class Chrono<TaskKind, DatastoreOptions> extends EventEmitter {
   #datastore: Datastore<DatastoreOptions>;

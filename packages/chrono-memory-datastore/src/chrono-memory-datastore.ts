@@ -1,12 +1,10 @@
 import type { Datastore, ScheduleInput, Task } from '@neofinancial/chrono-core';
 
-export type MemoryDatastoreOptions = Record<string, unknown>;
-
 export type MemoryDatastoreTask<TaskKind, TaskData> = Task<TaskKind, TaskData> & {
   priority: number;
 };
 
-export class MemoryDatastore implements Datastore<MemoryDatastoreOptions> {
+export class MemoryDatastore<MemoryDatastoreOptions> implements Datastore<MemoryDatastoreOptions> {
   #store: Map<string, MemoryDatastoreTask<unknown, unknown>>;
 
   constructor() {
@@ -36,7 +34,6 @@ export class MemoryDatastore implements Datastore<MemoryDatastoreOptions> {
       originalScheduleDate: input.when,
       scheduledAt: input.when,
     };
-    1;
 
     this.#store.set(id, task);
 
