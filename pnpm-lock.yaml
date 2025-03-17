@@ -35,6 +35,12 @@ importers:
 
   packages/chrono-core: {}
 
+  packages/chrono-memory-datastore:
+    dependencies:
+      '@neofinancial/chrono-core':
+        specifier: workspace:*
+        version: link:../chrono-core
+
   packages/chrono-mongo-datastore:
     dependencies:
       '@neofinancial/chrono-core':

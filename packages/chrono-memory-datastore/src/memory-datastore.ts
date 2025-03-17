@@ -1,32 +1,32 @@
-import type { Datastore, ScheduleInput, Task } from '../datastore';
+import type { Datastore, ScheduleInput, Task } from '@neofinancial/chrono-core';
 
-export type InMemoryDatastoreOptions = Record<string, unknown>;
+export type MemoryDatastoreOptions = Record<string, unknown>;
 
-export type InMemoryDatastoreTask<TaskKind, TaskData> = Task<TaskKind, TaskData> & {
+export type MemoryDatastoreTask<TaskKind, TaskData> = Task<TaskKind, TaskData> & {
   priority: number;
 };
 
-export class InMemoryDatastore implements Datastore<InMemoryDatastoreOptions> {
-  #store: Map<string, InMemoryDatastoreTask<unknown, unknown>>;
+export class MemoryDatastore implements Datastore<MemoryDatastoreOptions> {
+  #store: Map<string, MemoryDatastoreTask<unknown, unknown>>;
 
   constructor() {
     this.#store = new Map();
   }
 
   public async schedule<TaskKind, TaskData>(
-    input: ScheduleInput<TaskKind, TaskData, InMemoryDatastoreOptions>,
+    input: ScheduleInput<TaskKind, TaskData, MemoryDatastoreOptions>,
   ): Promise<Task<TaskKind, TaskData>> {
     if (input.idempotencyKey) {
       const existingTask = Array.from(this.#store.values()).find((t) => t.idempotencyKey === input.idempotencyKey);
 
       if (existingTask) {
-        return existingTask as InMemoryDatastoreTask<TaskKind, TaskData>;
+        return existingTask as MemoryDatastoreTask<TaskKind, TaskData>;
       }
     }
 
     const id = this.#store.size.toString();
 
-    const task: InMemoryDatastoreTask<TaskKind, TaskData> = {
+    const task: MemoryDatastoreTask<TaskKind, TaskData> = {
       id,
       kind: input.kind,
       status: 'pending',
@@ -36,6 +36,7 @@ export class InMemoryDatastore implements Datastore<InMemoryDatastoreOptions> {
       originalScheduleDate: input.when,
       scheduledAt: input.when,
     };
+    1;
 
     this.#store.set(id, task);
 
