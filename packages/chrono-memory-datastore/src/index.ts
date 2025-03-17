@@ -1,4 +1,4 @@
 export {
-  MemoryDatastore,
-  type MemoryDatastoreTask,
+  ChronoMemoryDatastore,
+  type ChronoMemoryDatastoreTask,
 } from './chrono-memory-datastore';

@@ -33,7 +33,7 @@ importers:
         specifier: ^3.0.1
         version: 3.0.1(typescript@5.8.2)(vitest@3.0.8(@types/node@20.17.24))
 
-  examples/sample-memory-datastore:
+  examples/sample-memory-datastore-app:
     dependencies:
       '@neofinancial/chrono-core':
         specifier: workspace:*

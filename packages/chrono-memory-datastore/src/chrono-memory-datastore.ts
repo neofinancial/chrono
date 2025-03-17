@@ -1,11 +1,11 @@
 import type { Datastore, ScheduleInput, Task } from '@neofinancial/chrono-core';
 
-export type MemoryDatastoreTask<TaskKind, TaskData> = Task<TaskKind, TaskData> & {
+export type ChronoMemoryDatastoreTask<TaskKind, TaskData> = Task<TaskKind, TaskData> & {
   priority: number;
 };
 
-export class MemoryDatastore<MemoryDatastoreOptions> implements Datastore<MemoryDatastoreOptions> {
-  #store: Map<string, MemoryDatastoreTask<unknown, unknown>>;
+export class ChronoMemoryDatastore<MemoryDatastoreOptions> implements Datastore<MemoryDatastoreOptions> {
+  #store: Map<string, ChronoMemoryDatastoreTask<unknown, unknown>>;
 
   constructor() {
     this.#store = new Map();
@@ -18,13 +18,13 @@ export class MemoryDatastore<MemoryDatastoreOptions> implements Datastore<Memory
       const existingTask = Array.from(this.#store.values()).find((t) => t.idempotencyKey === input.idempotencyKey);
 
       if (existingTask) {
-        return existingTask as MemoryDatastoreTask<TaskKind, TaskData>;
+        return existingTask as ChronoMemoryDatastoreTask<TaskKind, TaskData>;
       }
     }
 
     const id = this.#store.size.toString();
 
-    const task: MemoryDatastoreTask<TaskKind, TaskData> = {
+    const task: ChronoMemoryDatastoreTask<TaskKind, TaskData> = {
       id,
       kind: input.kind,
       status: 'pending',

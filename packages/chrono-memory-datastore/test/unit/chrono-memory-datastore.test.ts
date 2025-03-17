@@ -1,16 +1,16 @@
 import { beforeEach, describe, expect, test } from 'vitest';
 
-import { MemoryDatastore } from '../../src';
+import { ChronoMemoryDatastore } from '../../src';
 
 describe('ChronoMemoryDatastore', () => {
   type TaskKind = 'send-test-task';
   type TaskData = { someField: number };
   type DatastoreOptions = Record<string, unknown>;
 
-  let memoryDatastore = new MemoryDatastore<DatastoreOptions>();
+  let memoryDatastore = new ChronoMemoryDatastore<DatastoreOptions>();
 
   beforeEach(() => {
-    memoryDatastore = new MemoryDatastore<DatastoreOptions>();
+    memoryDatastore = new ChronoMemoryDatastore<DatastoreOptions>();
   });
 
   describe('schedule', () => {

@@ -1,5 +1,5 @@
 {
-  "name": "sample-mongo-datastore",
+  "name": "sample-mongo-datastore-app",
   "version": "1.0.0",
   "description": "Sample app that uses the chrono memory datastore",
   "main": "build/main.js",
