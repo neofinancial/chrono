@@ -37,57 +37,60 @@ describe('Chrono', () => {
   });
 
   describe('scheduleTask', () => {
-    const mockScheduleInput: Task<TaskKind, TaskData> = {
+    const mockScheduleOutput: Task<TaskKind, TaskData> = {
       id: faker.string.nanoid(),
       kind: 'send-test-task',
       status: 'pending',
       data: { someField: 1 },
+      priority: 0,
+      idempotencyKey: faker.string.nanoid(),
+      originalScheduleDate: faker.date.future(),
       scheduledAt: faker.date.future(),
     };
 
     test('schedule a task successfully', async () => {
-      mockDatastore.schedule.mockResolvedValueOnce(mockScheduleInput);
+      mockDatastore.schedule.mockResolvedValueOnce(mockScheduleOutput);
 
       const result = await chrono.scheduleTask({
-        when: mockScheduleInput.scheduledAt,
-        kind: mockScheduleInput.kind,
-        data: mockScheduleInput.data,
+        when: mockScheduleOutput.scheduledAt,
+        kind: mockScheduleOutput.kind,
+        data: mockScheduleOutput.data,
       });
 
-      expect(result).toEqual(mockScheduleInput);
+      expect(result).toEqual(mockScheduleOutput);
     });
 
     test('calls datastore.schedule successfully', async () => {
-      mockDatastore.schedule.mockResolvedValueOnce(mockScheduleInput);
+      mockDatastore.schedule.mockResolvedValueOnce(mockScheduleOutput);
 
       await chrono.scheduleTask({
-        when: mockScheduleInput.scheduledAt,
-        kind: mockScheduleInput.kind,
-        data: mockScheduleInput.data,
+        when: mockScheduleOutput.scheduledAt,
+        kind: mockScheduleOutput.kind,
+        data: mockScheduleOutput.data,
       });
 
       expect(mockDatastore.schedule).toHaveBeenCalledOnce();
       expect(mockDatastore.schedule).toHaveBeenCalledWith({
-        when: mockScheduleInput.scheduledAt,
-        kind: mockScheduleInput.kind,
-        data: mockScheduleInput.data,
+        when: mockScheduleOutput.scheduledAt,
+        kind: mockScheduleOutput.kind,
+        data: mockScheduleOutput.data,
       });
     });
 
     test('emits task-scheduled event successfully', async () => {
-      mockDatastore.schedule.mockResolvedValueOnce(mockScheduleInput);
+      mockDatastore.schedule.mockResolvedValueOnce(mockScheduleOutput);
 
       const emitSpy = vitest.spyOn(chrono, 'emit');
 
       await chrono.scheduleTask({
-        when: mockScheduleInput.scheduledAt,
-        kind: mockScheduleInput.kind,
-        data: mockScheduleInput.data,
+        when: mockScheduleOutput.scheduledAt,
+        kind: mockScheduleOutput.kind,
+        data: mockScheduleOutput.data,
       });
 
       expect(emitSpy).toHaveBeenCalledOnce();
       expect(emitSpy).toHaveBeenCalledWith('task-scheduled', {
-        task: mockScheduleInput,
+        task: mockScheduleOutput,
         timestamp: expect.any(Date),
       });
     });
@@ -100,9 +103,9 @@ describe('Chrono', () => {
       const emitSpy = vitest.spyOn(chrono, 'emit');
 
       const mockScheduleTaskInput = {
-        when: mockScheduleInput.scheduledAt,
-        kind: mockScheduleInput.kind,
-        data: mockScheduleInput.data,
+        when: mockScheduleOutput.scheduledAt,
+        kind: mockScheduleOutput.kind,
+        data: mockScheduleOutput.data,
       };
 
       await expect(chrono.scheduleTask(mockScheduleTaskInput)).rejects.toThrow('Failed to schedule task');
