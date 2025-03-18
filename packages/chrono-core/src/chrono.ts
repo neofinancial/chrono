@@ -9,7 +9,8 @@ export type ScheduleTaskInput<TaskKind, TaskData, DatastoreOptions> = ScheduleIn
   DatastoreOptions
 >;
 
-export type ChronoOptions = {
+export type ChronoConfig<DatastoreOptions> = {
+  datastore: Datastore<DatastoreOptions>;
   pollingInterval?: number;
   maxConcurrency?: number;
 };
@@ -26,13 +27,13 @@ export class Chrono<TaskKind, DatastoreOptions> extends EventEmitter {
   /* Flag to indicate if the instance is stopping */
   #isStopping = false;
 
-  constructor(datastore: Datastore<DatastoreOptions>, options: ChronoOptions) {
+  constructor(config: ChronoConfig<DatastoreOptions>) {
     super();
 
-    this.#datastore = datastore;
+    this.#datastore = config.datastore;
 
-    if (options.pollingInterval) this.#pollingInterval = options.pollingInterval;
-    if (options.maxConcurrency) this.#maxConcurrency = options.maxConcurrency;
+    if (config.pollingInterval) this.#pollingInterval = config.pollingInterval;
+    if (config.maxConcurrency) this.#maxConcurrency = config.maxConcurrency;
   }
 
   public async start(): Promise<void> {
