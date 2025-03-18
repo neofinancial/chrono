@@ -1,21 +1,24 @@
 import { Chrono } from '@neofinancial/chrono-core';
 import { ChronoMemoryDatastore } from '@neofinancial/chrono-memory-datastore';
 
-type TaskKind = 'send-test-task';
-type TaskData = { someField: number };
 type DatastoreOptions = undefined;
+
+type TaskMapping = {
+  'async-messaging': { someField: number };
+  'send-email': { url: string };
+};
 
 async function main() {
   const memoryDatastore = new ChronoMemoryDatastore<DatastoreOptions>();
-  const chrono = new Chrono<TaskKind, undefined>(memoryDatastore);
+  const chrono = new Chrono<TaskMapping, undefined>(memoryDatastore);
 
-  const data: TaskData = {
+  const data = {
     someField: 123,
   };
 
   const result = await chrono.scheduleTask({
     when: new Date(),
-    kind: 'send-test-task',
+    kind: 'async-messaging',
     data,
   });
 

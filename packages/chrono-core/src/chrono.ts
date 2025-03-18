@@ -8,8 +8,16 @@ export type ScheduleTaskInput<TaskKind, TaskData, DatastoreOptions> = ScheduleIn
   DatastoreOptions
 >;
 
-export class Chrono<TaskKind, DatastoreOptions> extends EventEmitter {
+export type RegisterTaskHandlerInput<TaskKind, TaskData> = {
+  kind: TaskKind;
+  handler: (task: Task<TaskKind, TaskData>) => Promise<void>;
+};
+
+export class Chrono<TaskMapping extends Record<PropertyKey, unknown>, DatastoreOptions> extends EventEmitter {
   #datastore: Datastore<DatastoreOptions>;
+  #handlers: Partial<{
+    [Key in keyof TaskMapping]: (task: Task<Key, TaskMapping[Key]>) => Promise<void>;
+  }> = {};
 
   constructor(datastore: Datastore<DatastoreOptions>) {
     super();
@@ -32,7 +40,7 @@ export class Chrono<TaskKind, DatastoreOptions> extends EventEmitter {
     this.emit('close', { timestamp: new Date() });
   }
 
-  public async scheduleTask<TaskData>(
+  public async scheduleTask<TaskKind extends keyof TaskMapping, TaskData extends TaskMapping[TaskKind]>(
     input: ScheduleTaskInput<TaskKind, TaskData, DatastoreOptions>,
   ): Promise<Task<TaskKind, TaskData>> {
     try {
@@ -47,9 +55,19 @@ export class Chrono<TaskKind, DatastoreOptions> extends EventEmitter {
 
       return task;
     } catch (error) {
-      this.emit('task-schedule-failed', { error, input, timestamp: new Date() });
+      this.emit('task-schedule-failed', {
+        error,
+        input,
+        timestamp: new Date(),
+      });
 
       throw error;
     }
+  }
+
+  public registerTaskHandler<TaskKind extends keyof TaskMapping>(
+    input: RegisterTaskHandlerInput<TaskKind, TaskMapping[TaskKind]>,
+  ): void {
+    this.#handlers[input.kind] = input.handler;
   }
 }

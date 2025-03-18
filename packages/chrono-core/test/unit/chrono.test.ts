@@ -6,13 +6,15 @@ import { Chrono } from '../../src/chrono';
 import type { Datastore, Task } from '../../src/datastore';
 
 describe('Chrono', () => {
-  type TaskKind = 'send-test-task';
   type TaskData = { someField: number };
+  type TaskMapping = {
+    'send-test-task': TaskData;
+  };
   type DatastoreOptions = Record<string, unknown>;
 
   const mockDatastore = mock<Datastore<DatastoreOptions>>();
 
-  const chrono = new Chrono<TaskKind, DatastoreOptions>(mockDatastore);
+  const chrono = new Chrono<TaskMapping, DatastoreOptions>(mockDatastore);
 
   describe('start', () => {
     test('emits ready event when chrono is instantiated successfully', async () => {
@@ -21,7 +23,9 @@ describe('Chrono', () => {
       await chrono.start();
 
       expect(emitSpy).toHaveBeenCalledOnce();
-      expect(emitSpy).toHaveBeenCalledWith('ready', { timestamp: expect.any(Date) });
+      expect(emitSpy).toHaveBeenCalledWith('ready', {
+        timestamp: expect.any(Date),
+      });
     });
   });
 
@@ -32,12 +36,14 @@ describe('Chrono', () => {
       await chrono.stop();
 
       expect(emitSpy).toHaveBeenCalledOnce();
-      expect(emitSpy).toHaveBeenCalledWith('close', { timestamp: expect.any(Date) });
+      expect(emitSpy).toHaveBeenCalledWith('close', {
+        timestamp: expect.any(Date),
+      });
     });
   });
 
   describe('scheduleTask', () => {
-    const mockScheduleOutput: Task<TaskKind, TaskData> = {
+    const mockScheduleOutput: Task<keyof TaskMapping, TaskData> = {
       id: faker.string.nanoid(),
       kind: 'send-test-task',
       status: 'pending',
