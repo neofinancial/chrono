@@ -32,4 +32,10 @@ export interface Datastore<DatastoreOptions> {
   schedule<TaskKind, TaskData>(
     input: ScheduleInput<TaskKind, TaskData, DatastoreOptions>,
   ): Promise<Task<TaskKind, TaskData>>;
+
+  claim<TaskKind, TaskData>(): Promise<Task<TaskKind, TaskData>>;
+
+  complete(taskId: string): Promise<void>;
+
+  fail(taskId: string, error: Error): Promise<void>;
 }
