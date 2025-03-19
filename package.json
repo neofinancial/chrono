@@ -18,7 +18,7 @@
   "keywords": [],
   "author": "Neo Financial Engineering <engineering@neofinancial.com>",
   "license": "MIT",
-  "packageManager": "pnpm@10.6.2",
+  "packageManager": "pnpm@10.6.5",
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "@faker-js/faker": "^9.6.0",
