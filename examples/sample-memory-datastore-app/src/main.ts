@@ -9,8 +9,8 @@ type TaskMapping = {
 };
 
 async function main() {
-  const memoryDatastore = new ChronoMemoryDatastore<DatastoreOptions>();
-  const chrono = new Chrono<TaskMapping, undefined>(memoryDatastore);
+  const memoryDatastore = new ChronoMemoryDatastore<TaskMapping, DatastoreOptions>();
+  const chrono = new Chrono<TaskMapping, DatastoreOptions>(memoryDatastore);
 
   const data = {
     someField: 123,

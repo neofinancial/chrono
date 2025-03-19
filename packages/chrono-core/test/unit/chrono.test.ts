@@ -12,7 +12,7 @@ describe('Chrono', () => {
   };
   type DatastoreOptions = Record<string, unknown>;
 
-  const mockDatastore = mock<Datastore<DatastoreOptions>>();
+  const mockDatastore = mock<Datastore<keyof TaskMapping, TaskData, DatastoreOptions>>();
 
   const chrono = new Chrono<TaskMapping, DatastoreOptions>(mockDatastore);
 
