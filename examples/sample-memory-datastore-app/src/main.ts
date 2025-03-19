@@ -12,10 +12,6 @@ async function main() {
   const memoryDatastore = new ChronoMemoryDatastore<TaskMapping, DatastoreOptions>();
   const chrono = new Chrono<TaskMapping, DatastoreOptions>(memoryDatastore);
 
-  const data = {
-    someField: 123,
-  };
-
   chrono.registerTaskHandler({
     kind: 'async-messaging',
     handler: async (task) => {
@@ -30,10 +26,12 @@ async function main() {
     },
   });
 
+  await chrono.start();
+
   const result = await chrono.scheduleTask({
     when: new Date(),
     kind: 'async-messaging',
-    data,
+    data: { someField: 123 },
   });
 
   console.log('scheduled task:', result);
@@ -41,12 +39,12 @@ async function main() {
   const result2 = await chrono.scheduleTask({
     when: new Date(),
     kind: 'send-email',
-    data: {
-      url: 'https://example.com',
-    },
+    data: { url: 'https://example.com' },
   });
 
   console.log('scheduled task:', result2);
+
+  await chrono.stop();
 }
 
 main().catch(console.error);

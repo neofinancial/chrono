@@ -15,12 +15,17 @@ export type RegisterTaskHandlerInput<TaskKind, TaskData> = {
   handler: (task: Task<TaskKind, TaskData>) => Promise<void>;
 };
 
-/*
-type TaskMapping = {
-  "async-messaging": { someField: number };
-  "send-email": { url: string };
-};
-*/
+/**
+ * This is a type that represents the mapping of task kinds to their respective data types.
+ *
+ * Eg. shape of the TaskMapping type:
+ *
+ * type TaskMapping = {
+ *   "async-messaging": { someField: number };
+ *   "send-email": { url: string };
+ * };
+ *
+ */
 
 export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> extends EventEmitter {
   private datastore: Datastore<
@@ -37,17 +42,18 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> exten
   }
 
   public async start(): Promise<void> {
-    // Emit ready event when the instance is ready.
-    // This is useful for consumers to know when the instance is ready to accept tasks.
-    // In the future, we might want to add more initialization logic here, like ensuring the datastore is connected.
+    for (const processor of this.processors.values()) {
+      await processor.start();
+    }
+
     this.emit('ready', { timestamp: new Date() });
   }
 
   public async stop(): Promise<void> {
-    // Emit close event when the instance is closed.
-    // This is useful for consumers to know when the instance is closed and no longer accepting tasks.
-    // In the future, we might want to add more cleanup logic here, like closing the datastore connection
-    // and stopping all handlers.
+    for (const processor of this.processors.values()) {
+      await processor.stop();
+    }
+
     this.emit('close', { timestamp: new Date() });
   }
 
