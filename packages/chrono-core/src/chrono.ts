@@ -1,6 +1,8 @@
 import { EventEmitter } from 'node:stream';
 
+import type { TaskMappingBase } from '.';
 import type { Datastore, ScheduleInput, Task } from './datastore';
+import { type Processor, createProcessor } from './processors';
 
 export type ScheduleTaskInput<TaskKind, TaskData, DatastoreOptions> = ScheduleInput<
   TaskKind,
@@ -13,16 +15,25 @@ export type RegisterTaskHandlerInput<TaskKind, TaskData> = {
   handler: (task: Task<TaskKind, TaskData>) => Promise<void>;
 };
 
-export class Chrono<TaskMapping extends Record<PropertyKey, unknown>, DatastoreOptions> extends EventEmitter {
-  #datastore: Datastore<DatastoreOptions>;
-  #handlers: Partial<{
-    [Key in keyof TaskMapping]: (task: Task<Key, TaskMapping[Key]>) => Promise<void>;
-  }> = {};
+/*
+type TaskMapping = {
+  "async-messaging": { someField: number };
+  "send-email": { url: string };
+};
+*/
 
-  constructor(datastore: Datastore<DatastoreOptions>) {
+export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> extends EventEmitter {
+  private datastore: Datastore<
+    keyof TaskMapping, // "async-messaging" | "send-email"
+    TaskMapping[keyof TaskMapping], // { someField: number } | { url: string }
+    DatastoreOptions
+  >;
+  private processors: Map<keyof TaskMapping, Processor> = new Map();
+
+  constructor(datastore: Datastore<keyof TaskMapping, TaskMapping[keyof TaskMapping], DatastoreOptions>) {
     super();
 
-    this.#datastore = datastore;
+    this.datastore = datastore;
   }
 
   public async start(): Promise<void> {
@@ -44,7 +55,7 @@ export class Chrono<TaskMapping extends Record<PropertyKey, unknown>, DatastoreO
     input: ScheduleTaskInput<TaskKind, TaskData, DatastoreOptions>,
   ): Promise<Task<TaskKind, TaskData>> {
     try {
-      const task = await this.#datastore.schedule({
+      const task = await this.datastore.schedule({
         when: input.when,
         kind: input.kind,
         data: input.data,
@@ -53,7 +64,7 @@ export class Chrono<TaskMapping extends Record<PropertyKey, unknown>, DatastoreO
 
       this.emit('task-scheduled', { task, timestamp: new Date() });
 
-      return task;
+      return task as Task<TaskKind, TaskData>; // TODO
     } catch (error) {
       this.emit('task-schedule-failed', {
         error,
@@ -68,6 +79,17 @@ export class Chrono<TaskMapping extends Record<PropertyKey, unknown>, DatastoreO
   public registerTaskHandler<TaskKind extends keyof TaskMapping>(
     input: RegisterTaskHandlerInput<TaskKind, TaskMapping[TaskKind]>,
   ): void {
-    this.#handlers[input.kind] = input.handler;
+    if (this.processors.has(input.kind)) {
+      throw new Error('Handler for task kind already exists');
+    }
+
+    const processor = createProcessor<TaskKind, TaskMapping[TaskKind], DatastoreOptions>({
+      kind: input.kind,
+      datastore: this.datastore as Datastore<TaskKind, TaskMapping[TaskKind], DatastoreOptions>, // TODO
+      handler: input.handler,
+      configuration: { maxConcurrency: 1 },
+    });
+
+    this.processors.set(input.kind, processor);
   }
 }

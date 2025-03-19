@@ -17,6 +17,8 @@ export type Task<TaskKind, TaskData> = {
   originalScheduleDate: Date;
   /** The current scheduled execution date, which may change if rescheduled */
   scheduledAt: Date;
+  /** The date the task is mark 'completed' */
+  completedAt?: Date;
 };
 
 export type ScheduleInput<TaskKind, TaskData, DatastoreOptions> = {
@@ -28,8 +30,13 @@ export type ScheduleInput<TaskKind, TaskData, DatastoreOptions> = {
   datastoreOptions?: DatastoreOptions;
 };
 
-export interface Datastore<DatastoreOptions> {
-  schedule<TaskKind, TaskData>(
-    input: ScheduleInput<TaskKind, TaskData, DatastoreOptions>,
-  ): Promise<Task<TaskKind, TaskData>>;
+export type ClaimTaskInput<TaskKind> = {
+  kind: TaskKind;
+};
+
+export interface Datastore<TaskKind, TaskData, DatastoreOptions> {
+  schedule(input: ScheduleInput<TaskKind, TaskData, DatastoreOptions>): Promise<Task<TaskKind, TaskData>>;
+  claim(input: ClaimTaskInput<TaskKind>): Promise<Task<TaskKind, TaskData> | undefined>;
+  complete(taskId: string): Promise<Task<TaskKind, TaskData>>;
+  fail(taskId: string, error: Error): Promise<Task<TaskKind, TaskData>>;
 }
