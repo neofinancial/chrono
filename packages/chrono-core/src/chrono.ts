@@ -1,8 +1,9 @@
 import { EventEmitter } from 'node:stream';
 
-import type { TaskMappingBase } from '.';
 import type { Datastore, ScheduleInput, Task } from './datastore';
 import { type Processor, createProcessor } from './processors';
+
+export type TaskMappingBase = Record<PropertyKey, unknown>;
 
 export type ScheduleTaskInput<TaskKind, TaskData, DatastoreOptions> = ScheduleInput<
   TaskKind,
@@ -84,7 +85,7 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> exten
 
   public registerTaskHandler<TaskKind extends keyof TaskMapping>(
     input: RegisterTaskHandlerInput<TaskKind, TaskMapping[TaskKind]>,
-  ): void {
+  ): Processor {
     if (this.processors.has(input.kind)) {
       throw new Error('Handler for task kind already exists');
     }
@@ -97,5 +98,7 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> exten
     });
 
     this.processors.set(input.kind, processor);
+
+    return processor;
   }
 }

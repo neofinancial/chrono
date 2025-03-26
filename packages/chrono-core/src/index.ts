@@ -1,4 +1,2 @@
-export { Chrono, type ScheduleTaskInput } from './chrono';
+export { Chrono, type ScheduleTaskInput, type TaskMappingBase } from './chrono';
 export type { Datastore, ScheduleInput, Task, TaskStatus } from './datastore';
-
-export type TaskMappingBase = Record<PropertyKey, unknown>;

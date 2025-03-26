@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:stream';
 import { setTimeout } from 'node:timers/promises';
 
 import type { Datastore, Task } from '../datastore';
-import { type Processor, TaskErrorChannel, TaskRunner } from './processor';
+import { type Processor, TaskRunner } from './processor';
 
 type SimpleProcessorConfig<TaskKind, TaskData, DatastoreOptions> = {
   datastore: Datastore<TaskKind, TaskData, DatastoreOptions>;
@@ -15,7 +15,7 @@ export class SimpleProcessor<TaskKind, TaskData, DatastoreOptions> extends Event
   private taskKind: TaskKind;
   private datastore: Datastore<TaskKind, TaskData, DatastoreOptions>;
   private handler: (task: Task<TaskKind, TaskData>) => Promise<void>;
-  private runningTasks: Promise<void>[] = [];
+  private runningTasks: TaskRunner[] = [];
   private stopRequested = false;
   private maxConcurrency: number;
 
@@ -32,27 +32,30 @@ export class SimpleProcessor<TaskKind, TaskData, DatastoreOptions> extends Event
   }
 
   async start(): Promise<void> {
-    if (this.stopRequested || this.runningTasks.length >= 0) {
+    if (this.stopRequested || this.runningTasks.length > 0) {
       return;
     }
 
     for (let i = 0; i < this.maxConcurrency; i++) {
-      const errorChannel = new TaskErrorChannel();
-      const taskRunner = new TaskRunner(i, errorChannel, () => this.runTask());
+      const taskRunner = new TaskRunner(i, () => this.runTask());
 
-      this.runningTasks.push(taskRunner.run());
+      this.runningTasks.push(taskRunner);
 
-      errorChannel.onError((event) => {
-        const taskRunner = new TaskRunner(event.taskIndex, errorChannel, () => this.runTask());
-        this.runningTasks[event.taskIndex] = taskRunner.run();
+      taskRunner.onError((event) => {
+        this.emit('task-runner-error', event);
+        process.nextTick(() => taskRunner.run());
       });
+
+      process.nextTick(() => taskRunner.run());
     }
   }
 
   async stop(): Promise<void> {
     this.stopRequested = true;
 
-    await Promise.allSettled(this.runningTasks);
+    await Promise.allSettled(
+      this.runningTasks.map((taskRunner) => new Promise<void>((resolve) => taskRunner.onceExit(resolve))),
+    );
   }
 
   async runTask(): Promise<void> {

@@ -43,13 +43,37 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
     return task;
   }
 
-  public claim<TaskKind, TaskData>(input: ClaimTaskInput<TaskKind>): Promise<Task<TaskKind, TaskData> | undefined> {
-    throw new Error('Method not implemented.');
+  public async claim<TaskKind, TaskData>(
+    input: ClaimTaskInput<TaskKind>,
+  ): Promise<Task<TaskKind, TaskData> | undefined> {
+    const claimedTask = Array.from(this.store.values()).find((t) => t.kind === input.kind && t.status === 'pending');
+
+    if (claimedTask) {
+      claimedTask.status = 'claimed';
+    }
+
+    return claimedTask as Task<TaskKind, TaskData>;
   }
-  public complete<TaskKind, TaskData>(taskId: string): Promise<Task<TaskKind, TaskData>> {
-    throw new Error('Method not implemented.');
+  public async complete<TaskKind, TaskData>(taskId: string): Promise<Task<TaskKind, TaskData>> {
+    const task = Array.from(this.store.values()).find((t) => t.id === taskId);
+
+    if (task) {
+      task.status = 'completed';
+
+      return task as Task<TaskKind, TaskData>;
+    }
+
+    throw new Error(`Task with id ${taskId} not found`);
   }
-  public fail<TaskKind, TaskData>(taskId: string, error: Error): Promise<Task<TaskKind, TaskData>> {
-    throw new Error('Method not implemented.');
+  public async fail<TaskKind, TaskData>(taskId: string, error: Error): Promise<Task<TaskKind, TaskData>> {
+    const task = Array.from(this.store.values()).find((t) => t.id === taskId);
+
+    if (task) {
+      task.status = 'failed';
+
+      return task as Task<TaskKind, TaskData>;
+    }
+
+    throw new Error(`Task with id ${taskId} not found`);
   }
 }
