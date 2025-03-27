@@ -51,11 +51,11 @@ export class SimpleProcessor<TaskKind, TaskData, DatastoreOptions> extends Event
   }
 
   async stop(): Promise<void> {
+    const exitPromises = Promise.allSettled(this.runningTasks.map((taskRunner) => taskRunner.onceExit()));
+
     this.stopRequested = true;
 
-    await Promise.allSettled(
-      this.runningTasks.map((taskRunner) => new Promise<void>((resolve) => taskRunner.onceExit(resolve))),
-    );
+    await exitPromises;
   }
 
   async runTask(): Promise<void> {

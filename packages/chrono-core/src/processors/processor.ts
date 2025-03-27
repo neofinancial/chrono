@@ -36,13 +36,16 @@ export class TaskRunner extends EventEmitter {
       };
 
       this.emit('error', errorEvent);
+
+      // To prevent emitting `exit` event
+      return;
     }
 
     this.emit('exit', this.taskIndex);
   }
 
-  onceExit(handler: () => void): void {
-    this.once('exit', () => handler());
+  onceExit(): Promise<void> {
+    return new Promise((resolve) => this.once('exit', resolve));
   }
 
   onError(handler: (errorEvent: TaskErrorEvent) => void): void {
