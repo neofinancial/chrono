@@ -50,10 +50,11 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
 
     if (claimedTask) {
       claimedTask.status = 'claimed';
-    }
 
-    return claimedTask as Task<TaskKind, TaskData>;
+      return claimedTask as Task<TaskKind, TaskData>;
+    }
   }
+
   public async complete<TaskKind, TaskData>(taskId: string): Promise<Task<TaskKind, TaskData>> {
     const task = Array.from(this.store.values()).find((t) => t.id === taskId);
 
