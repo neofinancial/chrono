@@ -8,10 +8,11 @@ import {
 import type { ClaimTaskInput } from '@neofinancial/chrono-core/build/datastore';
 import type { ClientSession, Db, OptionalId, WithId } from 'mongodb';
 
-const COLLECTION_NAME = 'chrono-tasks';
+const DEFAULT_COLLECTION_NAME = 'chrono-tasks';
 
 export type ChronoMongoDatastoreConfig = {
-  completedDocumentTTL?: number; // How to handle index changes??????
+  completedDocumentTTL?: number;
+  collectionName?: string;
 };
 
 export type MongoDatastoreOptions = {
@@ -22,33 +23,11 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
   implements Datastore<TaskMapping, MongoDatastoreOptions>
 {
   private database: Db;
+  private collectionName: string;
 
   constructor(database: Db, config?: ChronoMongoDatastoreConfig) {
-    const collection = database.collection<Task<keyof TaskMapping, TaskMapping[keyof TaskMapping]>>(COLLECTION_NAME);
-
-    // TODO
-    collection.createIndexes(
-      [
-        {
-          key: { idempotencyKey: 1 },
-          name: 'idempotencyKey',
-          sparse: true,
-          unique: true,
-        },
-        { key: { status: 1, scheduledAt: 1, priority: 1 } }, // Double check this
-        {
-          key: { completedAt: 1 },
-          partialFilterExpression: {
-            status: TaskStatus.COMPLETED,
-            completeAt: { $exists: true },
-          },
-          expireAfterSeconds: config?.completedDocumentTTL || 60 * 60 * 24 * 7, // 7 days
-        },
-      ],
-      {},
-    );
-
     this.database = database;
+    this.collectionName = config?.collectionName || DEFAULT_COLLECTION_NAME;
   }
 
   async schedule<TaskKind extends keyof TaskMapping>(
@@ -66,7 +45,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
       scheduledAt: now,
     };
 
-    const results = await this.database.collection(COLLECTION_NAME).insertOne(createInput, {
+    const results = await this.database.collection(this.collectionName).insertOne(createInput, {
       ...(input?.datastoreOptions?.session ? { session: input.datastoreOptions.session } : undefined),
     });
 
