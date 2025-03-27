@@ -1,4 +1,12 @@
-export type TaskStatus = 'pending' | 'claimed' | 'completed' | 'failed';
+import type { TaskMappingBase } from '.';
+
+export const TaskStatus = {
+  PENDING: 'PENDING',
+  CLAIMED: 'CLAIMED',
+  COMPLETED: 'COMPLETED',
+  FAILED: 'FAILED',
+} as const;
+export type TaskStatus = (typeof TaskStatus)[keyof typeof TaskStatus];
 
 export type Task<TaskKind, TaskData> = {
   /** A unique identifier for the task */
@@ -17,6 +25,8 @@ export type Task<TaskKind, TaskData> = {
   originalScheduleDate: Date;
   /** The current scheduled execution date, which may change if rescheduled */
   scheduledAt: Date;
+  /** The date the task is mark 'claimed */
+  claimedAt?: Date;
   /** The date the task is mark 'completed' */
   completedAt?: Date;
 };
@@ -34,9 +44,13 @@ export type ClaimTaskInput<TaskKind> = {
   kind: TaskKind;
 };
 
-export interface Datastore<TaskKind, TaskData, DatastoreOptions> {
-  schedule(input: ScheduleInput<TaskKind, TaskData, DatastoreOptions>): Promise<Task<TaskKind, TaskData>>;
-  claim(input: ClaimTaskInput<TaskKind>): Promise<Task<TaskKind, TaskData> | undefined>;
-  complete(taskId: string): Promise<Task<TaskKind, TaskData>>;
-  fail(taskId: string, error: Error): Promise<Task<TaskKind, TaskData>>;
+export interface Datastore<TaskMapping extends TaskMappingBase, DatastoreOptions> {
+  schedule<TaskKind extends keyof TaskMapping>(
+    input: ScheduleInput<TaskKind, TaskMapping[TaskKind], DatastoreOptions>,
+  ): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
+  claim<TaskKind extends keyof TaskMapping>(
+    input: ClaimTaskInput<TaskKind>,
+  ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined>;
+  complete<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
+  fail<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
 }

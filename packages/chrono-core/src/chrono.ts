@@ -29,14 +29,10 @@ export type RegisterTaskHandlerInput<TaskKind, TaskData> = {
  */
 
 export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> extends EventEmitter {
-  private datastore: Datastore<
-    keyof TaskMapping, // "async-messaging" | "send-email"
-    TaskMapping[keyof TaskMapping], // { someField: number } | { url: string }
-    DatastoreOptions
-  >;
+  private datastore: Datastore<TaskMapping, DatastoreOptions>;
   private processors: Map<keyof TaskMapping, Processor> = new Map();
 
-  constructor(datastore: Datastore<keyof TaskMapping, TaskMapping[keyof TaskMapping], DatastoreOptions>) {
+  constructor(datastore: Datastore<TaskMapping, DatastoreOptions>) {
     super();
 
     this.datastore = datastore;
@@ -58,9 +54,9 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> exten
     this.emit('close', { timestamp: new Date() });
   }
 
-  public async scheduleTask<TaskKind extends keyof TaskMapping, TaskData extends TaskMapping[TaskKind]>(
-    input: ScheduleTaskInput<TaskKind, TaskData, DatastoreOptions>,
-  ): Promise<Task<TaskKind, TaskData>> {
+  public async scheduleTask<TaskKind extends keyof TaskMapping>(
+    input: ScheduleTaskInput<TaskKind, TaskMapping[TaskKind], DatastoreOptions>,
+  ): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
     try {
       const task = await this.datastore.schedule({
         when: input.when,
@@ -71,7 +67,7 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> exten
 
       this.emit('task-scheduled', { task, timestamp: new Date() });
 
-      return task as Task<TaskKind, TaskData>; // TODO
+      return task;
     } catch (error) {
       this.emit('task-schedule-failed', {
         error,
@@ -90,9 +86,9 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> exten
       throw new Error('Handler for task kind already exists');
     }
 
-    const processor = createProcessor<TaskKind, TaskMapping[TaskKind], DatastoreOptions>({
+    const processor = createProcessor({
       kind: input.kind,
-      datastore: this.datastore as Datastore<TaskKind, TaskMapping[TaskKind], DatastoreOptions>, // TODO
+      datastore: this.datastore,
       handler: input.handler,
       configuration: { maxConcurrency: 1 },
     });

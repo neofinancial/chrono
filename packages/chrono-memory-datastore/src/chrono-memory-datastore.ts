@@ -1,36 +1,40 @@
-import type { Datastore, ScheduleInput, Task, TaskMappingBase } from '@neofinancial/chrono-core';
-import type { ClaimTaskInput } from '@neofinancial/chrono-core/build/datastore';
-
-export type ChronoMemoryDatastoreTask<TaskKind, TaskData> = Task<TaskKind, TaskData> & {
-  priority: number;
-};
+import {
+  type ClaimTaskInput,
+  type Datastore,
+  type ScheduleInput,
+  type Task,
+  type TaskMappingBase,
+  TaskStatus,
+} from '@neofinancial/chrono-core';
 
 export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDatastoreOptions>
-  implements Datastore<keyof TaskMapping, TaskMapping[keyof TaskMapping], MemoryDatastoreOptions>
+  implements Datastore<TaskMapping, MemoryDatastoreOptions>
 {
-  private store: Map<string, ChronoMemoryDatastoreTask<keyof TaskMapping, TaskMapping[keyof TaskMapping]>>;
+  private store: Map<string, Task<keyof TaskMapping, TaskMapping[keyof TaskMapping]>>;
 
   constructor() {
     this.store = new Map();
   }
 
-  public async schedule<TK extends keyof TaskMapping, TD extends TaskMapping[keyof TaskMapping]>(
-    input: ScheduleInput<TK, TD, MemoryDatastoreOptions>,
-  ): Promise<Task<TK, TD>> {
+  public async schedule<TaskKind extends keyof TaskMapping>(
+    input: ScheduleInput<TaskKind, TaskMapping[TaskKind], MemoryDatastoreOptions>,
+  ): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
     if (input.idempotencyKey) {
-      const existingTask = Array.from(this.store.values()).find((t) => t.idempotencyKey === input.idempotencyKey);
+      const existingTask = Array.from(this.store.values())
+        .filter((t): t is Task<TaskKind, TaskMapping[TaskKind]> => t.kind === input.kind)
+        .find((t) => t?.idempotencyKey === input.idempotencyKey);
 
       if (existingTask) {
-        return Promise.resolve(existingTask as Task<TK, TD>);
+        return Promise.resolve(existingTask);
       }
     }
 
     const id = this.store.size.toString();
 
-    const task: ChronoMemoryDatastoreTask<TK, TD> = {
+    const task: Task<TaskKind, TaskMapping[TaskKind]> = {
       id,
       kind: input.kind,
-      status: 'pending',
+      status: TaskStatus.PENDING,
       data: input.data,
       priority: input.priority ?? 0,
       idempotencyKey: input.idempotencyKey,
@@ -43,34 +47,39 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
     return task;
   }
 
-  public async claim<TaskKind, TaskData>(
+  public async claim<TaskKind extends keyof TaskMapping, TaskData extends TaskMapping[keyof TaskMapping]>(
     input: ClaimTaskInput<TaskKind>,
   ): Promise<Task<TaskKind, TaskData> | undefined> {
-    const claimedTask = Array.from(this.store.values()).find((t) => t.kind === input.kind && t.status === 'pending');
+    const claimedTask = Array.from(this.store.values()).find(
+      (t) => t.kind === input.kind && t.status === TaskStatus.PENDING,
+    );
 
     if (claimedTask) {
-      claimedTask.status = 'claimed';
+      claimedTask.status = TaskStatus.CLAIMED;
 
       return claimedTask as Task<TaskKind, TaskData>;
     }
   }
 
-  public async complete<TaskKind, TaskData>(taskId: string): Promise<Task<TaskKind, TaskData>> {
+  public async complete<TaskKind extends keyof TaskMapping, TaskData extends TaskMapping[keyof TaskMapping]>(
+    taskId: string,
+  ): Promise<Task<TaskKind, TaskData>> {
     const task = Array.from(this.store.values()).find((t) => t.id === taskId);
 
     if (task) {
-      task.status = 'completed';
+      task.status = TaskStatus.COMPLETED;
 
       return task as Task<TaskKind, TaskData>;
     }
 
     throw new Error(`Task with id ${taskId} not found`);
   }
-  public async fail<TaskKind, TaskData>(taskId: string, error: Error): Promise<Task<TaskKind, TaskData>> {
+
+  public async fail<TaskKind, TaskData>(taskId: string): Promise<Task<TaskKind, TaskData>> {
     const task = Array.from(this.store.values()).find((t) => t.id === taskId);
 
     if (task) {
-      task.status = 'failed';
+      task.status = TaskStatus.FAILED;
 
       return task as Task<TaskKind, TaskData>;
     }
