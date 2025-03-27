@@ -3,25 +3,27 @@ import { beforeEach, describe, expect, test } from 'vitest';
 import { ChronoMemoryDatastore } from '../../src';
 
 describe('ChronoMemoryDatastore', () => {
-  type TaskKind = 'send-test-task';
-  type TaskData = { someField: number };
   type DatastoreOptions = Record<string, unknown>;
+  type TaskMapping = {
+    'send-test-task': { someField: number };
+    'send-delayed_step-function': { differentField: string };
+  };
 
-  let memoryDatastore = new ChronoMemoryDatastore<DatastoreOptions>();
+  let memoryDatastore = new ChronoMemoryDatastore<TaskMapping, DatastoreOptions>();
 
   beforeEach(() => {
-    memoryDatastore = new ChronoMemoryDatastore<DatastoreOptions>();
+    memoryDatastore = new ChronoMemoryDatastore<TaskMapping, DatastoreOptions>();
   });
 
   describe('schedule', () => {
     test('should successfully schedule a task', async () => {
-      const data: TaskData = {
+      const data: TaskMapping['send-test-task'] = {
         someField: 123,
       };
 
       const when = new Date();
 
-      const result = await memoryDatastore.schedule<TaskKind, TaskData>({
+      const result = await memoryDatastore.schedule({
         when,
         kind: 'send-test-task',
         data,
@@ -41,14 +43,14 @@ describe('ChronoMemoryDatastore', () => {
     });
 
     test('should successfully schedule a task with idempotency key', async () => {
-      const data: TaskData = {
+      const data: TaskMapping['send-test-task'] = {
         someField: 123,
       };
 
       const when = new Date();
       const idempotencyKey = 'test-idempotency-key';
 
-      const result = await memoryDatastore.schedule<TaskKind, TaskData>({
+      const result = await memoryDatastore.schedule({
         when,
         kind: 'send-test-task',
         data,
@@ -72,7 +74,7 @@ describe('ChronoMemoryDatastore', () => {
       const when = new Date();
       const idempotencyKey = 'test-idempotency-key';
 
-      const task1 = await memoryDatastore.schedule<TaskKind, TaskData>({
+      const task1 = await memoryDatastore.schedule({
         when,
         kind: 'send-test-task',
         data: { someField: 123 },
@@ -80,7 +82,7 @@ describe('ChronoMemoryDatastore', () => {
         datastoreOptions: {},
       });
 
-      const result = await memoryDatastore.schedule<TaskKind, TaskData>({
+      const result = await memoryDatastore.schedule({
         when,
         kind: 'send-test-task',
         data: { someField: 456 },

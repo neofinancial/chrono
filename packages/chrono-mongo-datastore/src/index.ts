@@ -1,1 +1,1 @@
-export type SampleType = Record<string, unknown>;
+export { ChronoMongoDatastore } from 'chrono-mongo-datastore';

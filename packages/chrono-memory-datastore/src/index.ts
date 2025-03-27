@@ -1,4 +1,1 @@
-export {
-  ChronoMemoryDatastore,
-  type ChronoMemoryDatastoreTask,
-} from './chrono-memory-datastore';
+export { ChronoMemoryDatastore } from './chrono-memory-datastore';

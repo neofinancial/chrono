@@ -1,20 +1,28 @@
 import { EventEmitter } from 'node:stream';
 import { setTimeout } from 'node:timers/promises';
 
+import type { TaskMappingBase } from '..';
 import type { Datastore, Task } from '../datastore';
 import { type Processor, TaskErrorChannel, TaskRunner } from './processor';
 
-type SimpleProcessorConfig<TaskKind, TaskData, DatastoreOptions> = {
-  datastore: Datastore<TaskKind, TaskData, DatastoreOptions>;
+type SimpleProcessorConfig<
+  TaskKind extends keyof TaskMapping,
+  TaskMapping extends TaskMappingBase,
+  DatastoreOptions,
+> = {
+  datastore: Datastore<TaskMapping, DatastoreOptions>;
   kind: TaskKind;
-  handler: (task: Task<TaskKind, TaskData>) => Promise<void>;
+  handler: (task: Task<TaskKind, TaskMapping[TaskKind]>) => Promise<void>;
   maxConcurrency: number;
 };
 
-export class SimpleProcessor<TaskKind, TaskData, DatastoreOptions> extends EventEmitter implements Processor {
+export class SimpleProcessor<TaskKind extends keyof TaskMapping, TaskMapping extends TaskMappingBase, DatastoreOptions>
+  extends EventEmitter
+  implements Processor
+{
   private taskKind: TaskKind;
-  private datastore: Datastore<TaskKind, TaskData, DatastoreOptions>;
-  private handler: (task: Task<TaskKind, TaskData>) => Promise<void>;
+  private datastore: Datastore<TaskMapping, DatastoreOptions>;
+  private handler: (task: Task<TaskKind, TaskMapping[TaskKind]>) => Promise<void>;
   private runningTasks: Promise<void>[] = [];
   private stopRequested = false;
   private maxConcurrency: number;
@@ -22,7 +30,7 @@ export class SimpleProcessor<TaskKind, TaskData, DatastoreOptions> extends Event
   readonly claimIntervalMs = 150;
   readonly idleIntervalMs = 5_000;
 
-  constructor(config: SimpleProcessorConfig<TaskKind, TaskData, DatastoreOptions>) {
+  constructor(config: SimpleProcessorConfig<TaskKind, TaskMapping, DatastoreOptions>) {
     super();
 
     this.datastore = config.datastore;
@@ -52,12 +60,14 @@ export class SimpleProcessor<TaskKind, TaskData, DatastoreOptions> extends Event
   async stop(): Promise<void> {
     this.stopRequested = true;
 
-    await Promise.allSettled(this.runningTasks);
+    await Promise.all(this.runningTasks);
   }
 
   async runTask(): Promise<void> {
     while (!this.stopRequested) {
-      const task = await this.datastore.claim({ kind: this.taskKind });
+      const task = await this.datastore.claim<TaskKind>({
+        kind: this.taskKind,
+      });
 
       // If no tasks are available, wait before trying again
       if (!task) {
@@ -74,7 +84,7 @@ export class SimpleProcessor<TaskKind, TaskData, DatastoreOptions> extends Event
     }
   }
 
-  private async handleTask(task: Task<TaskKind, TaskData>) {
+  private async handleTask(task: Task<TaskKind, TaskMapping[TaskKind]>) {
     try {
       await this.handler(task);
 
@@ -85,7 +95,7 @@ export class SimpleProcessor<TaskKind, TaskData, DatastoreOptions> extends Event
         timestamp: completedTask.completedAt,
       });
     } catch (error) {
-      await this.datastore.fail(task.id, error as Error);
+      await this.datastore.fail(task.id);
       this.emit('task-failed', {
         task,
         timestamp: new Date(),

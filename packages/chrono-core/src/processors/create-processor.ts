@@ -1,4 +1,5 @@
 import type { Datastore, Task } from 'datastore';
+import type { TaskMappingBase } from '..';
 import type { Processor } from './processor';
 import { SimpleProcessor } from './simple-processor';
 
@@ -6,18 +7,24 @@ export type ProcessorConfiguration = {
   maxConcurrency: number;
 };
 
-export type CreateProcessorInput<TaskKind, TaskData, DatastoreOptions> = {
+export type CreateProcessorInput<
+  TaskKind extends keyof TaskMapping,
+  TaskMapping extends TaskMappingBase,
+  DatastoreOptions,
+> = {
   kind: TaskKind;
-  datastore: Datastore<TaskKind, TaskData, DatastoreOptions>;
-  handler: (task: Task<TaskKind, TaskData>) => Promise<void>;
+  datastore: Datastore<TaskMapping, DatastoreOptions>;
+  handler: (task: Task<TaskKind, TaskMapping[TaskKind]>) => Promise<void>;
   configuration: ProcessorConfiguration;
 };
 
-export function createProcessor<TaskKind, TaskData, DatastoreOptions>(
-  input: CreateProcessorInput<TaskKind, TaskData, DatastoreOptions>,
-): Processor {
+export function createProcessor<
+  TaskKind extends keyof TaskMapping,
+  TaskMapping extends TaskMappingBase,
+  DatastoreOptions,
+>(input: CreateProcessorInput<TaskKind, TaskMapping, DatastoreOptions>): Processor {
   // add more processors here
-  return new SimpleProcessor<TaskKind, TaskData, DatastoreOptions>({
+  return new SimpleProcessor<TaskKind, TaskMapping, DatastoreOptions>({
     datastore: input.datastore,
     kind: input.kind,
     handler: input.handler,

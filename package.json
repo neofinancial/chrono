@@ -26,7 +26,7 @@
     "husky": "^9.1.7",
     "rimraf": "^6.0.1",
     "typescript": "^5.8.2",
-    "vitest": "^3.0.8",
+    "vitest": "^3.0.9",
     "vitest-mock-extended": "^3.0.1"
   }
 }
