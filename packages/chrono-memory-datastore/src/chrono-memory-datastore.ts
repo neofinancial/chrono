@@ -16,7 +16,13 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
     this.store = new Map();
   }
 
-  public async schedule<TaskKind extends keyof TaskMapping>(
+  /**
+   * Schedules a task and returns it.
+   *
+   * @param input The input to schedule the task.
+   * @returns The scheduled task.
+   */
+  async schedule<TaskKind extends keyof TaskMapping>(
     input: ScheduleInput<TaskKind, TaskMapping[TaskKind], MemoryDatastoreOptions>,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
     if (input.idempotencyKey) {
@@ -25,7 +31,7 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
         .find((t) => t?.idempotencyKey === input.idempotencyKey);
 
       if (existingTask) {
-        return Promise.resolve(existingTask);
+        return existingTask;
       }
     }
 
@@ -47,41 +53,60 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
     return task;
   }
 
-  public async claim<TaskKind extends keyof TaskMapping, TaskData extends TaskMapping[keyof TaskMapping]>(
+  /**
+   * Claims a task and returns it.
+   *
+   * @param input The input to claim the task.
+   * @returns The claimed task or undefined if no task is available.
+   */
+  async claim<TaskKind extends keyof TaskMapping>(
     input: ClaimTaskInput<TaskKind>,
-  ): Promise<Task<TaskKind, TaskData> | undefined> {
+  ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined> {
     const claimedTask = Array.from(this.store.values()).find(
-      (t) => t.kind === input.kind && t.status === TaskStatus.PENDING,
+      (t): t is Task<TaskKind, TaskMapping[TaskKind]> => t.kind === input.kind && t.status === TaskStatus.PENDING,
     );
 
     if (claimedTask) {
       claimedTask.status = TaskStatus.CLAIMED;
 
-      return claimedTask as Task<TaskKind, TaskData>;
+      return claimedTask;
     }
   }
 
-  public async complete<TaskKind extends keyof TaskMapping, TaskData extends TaskMapping[keyof TaskMapping]>(
-    taskId: string,
-  ): Promise<Task<TaskKind, TaskData>> {
-    const task = Array.from(this.store.values()).find((t) => t.id === taskId);
+  /**
+   * Marks a task as completed and returns the task.
+   *
+   * @param taskId The ID of the task to mark as completed.
+   * @returns The task marked as completed.
+   */
+  async complete<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
+    const task = Array.from(this.store.values()).find(
+      (t): t is Task<TaskKind, TaskMapping[TaskKind]> => t.id === taskId,
+    );
 
     if (task) {
       task.status = TaskStatus.COMPLETED;
 
-      return task as Task<TaskKind, TaskData>;
+      return task;
     }
 
     throw new Error(`Task with id ${taskId} not found`);
   }
-
-  public async fail<TaskKind, TaskData>(taskId: string): Promise<Task<TaskKind, TaskData>> {
-    const task = Array.from(this.store.values()).find((t) => t.id === taskId);
+  /**
+   * Marks a task as failed and returns the task.
+   *
+   * @param taskId The ID of the task to mark as failed.
+   * @returns The task marked as failed.
+   */
+  async fail<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
+    const task = Array.from(this.store.values()).find(
+      (t): t is Task<TaskKind, TaskMapping[TaskKind]> => t.id === taskId,
+    );
 
     if (task) {
       task.status = TaskStatus.FAILED;
 
-      return task as Task<TaskKind, TaskData>;
+      return task;
     }
 
     throw new Error(`Task with id ${taskId} not found`);
