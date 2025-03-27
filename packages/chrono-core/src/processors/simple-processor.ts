@@ -3,7 +3,7 @@ import { setTimeout } from 'node:timers/promises';
 
 import type { TaskMappingBase } from '..';
 import type { Datastore, Task } from '../datastore';
-import { type Processor, TaskRunner } from './processor';
+import type { Processor } from './processor';
 
 type SimpleProcessorConfig<
   TaskKind extends keyof TaskMapping,
@@ -23,7 +23,7 @@ export class SimpleProcessor<TaskKind extends keyof TaskMapping, TaskMapping ext
   private taskKind: TaskKind;
   private datastore: Datastore<TaskMapping, DatastoreOptions>;
   private handler: (task: Task<TaskKind, TaskMapping[TaskKind]>) => Promise<void>;
-  private runningTasks: TaskRunner[] = [];
+  private exitChannels: EventEmitter[] = [];
   private stopRequested = false;
   private maxConcurrency: number;
 
@@ -39,34 +39,50 @@ export class SimpleProcessor<TaskKind extends keyof TaskMapping, TaskMapping ext
     this.taskKind = config.kind;
   }
 
+  /**
+   * Starts multiple concurrent process loops that claim and process tasks.
+   * Max concurrent processes is defined by the `maxConcurrency` property set in the constructor.
+   */
   async start(): Promise<void> {
-    if (this.stopRequested || this.runningTasks.length > 0) {
+    if (this.stopRequested || this.exitChannels.length > 0) {
       return;
     }
 
     for (let i = 0; i < this.maxConcurrency; i++) {
-      const taskRunner = new TaskRunner(i, () => this.runTask());
+      const exitChannel = new EventEmitter();
 
-      this.runningTasks.push(taskRunner);
+      this.exitChannels.push(exitChannel);
 
-      taskRunner.onError((event) => {
-        this.emit('task-runner-error', event);
-        process.nextTick(() => taskRunner.run());
-      });
+      const errorHandler = (error: Error) => {
+        this.emit('task-error', { error });
 
-      process.nextTick(() => taskRunner.run());
+        this.runProcessLoop(exitChannel).catch(errorHandler);
+      };
+
+      this.runProcessLoop(exitChannel).catch(errorHandler);
     }
   }
 
+  /**
+   * Stops the processor by signaling all process loops to exit,
+   * then waits for all process loops to finish before resolving.
+   */
   async stop(): Promise<void> {
-    const exitPromises = Promise.allSettled(this.runningTasks.map((taskRunner) => taskRunner.onceExit()));
+    const exitPromises = this.exitChannels.map(
+      (channel) => new Promise((resolve) => channel.once('processloop.exit', resolve)),
+    );
 
     this.stopRequested = true;
 
-    await exitPromises;
+    await Promise.all(exitPromises);
   }
 
-  async runTask(): Promise<void> {
+  /**
+   * The main loop that processes tasks.
+   *
+   * @param exitChannel The channel to signal when the loop exits.
+   */
+  private async runProcessLoop(exitChannel: EventEmitter): Promise<void> {
     while (!this.stopRequested) {
       const task = await this.datastore.claim({
         kind: this.taskKind,
@@ -85,6 +101,8 @@ export class SimpleProcessor<TaskKind extends keyof TaskMapping, TaskMapping ext
       // Wait a bit before claiming the next task
       await setTimeout(this.claimIntervalMs);
     }
+
+    exitChannel.emit('processloop.exit');
   }
 
   private async handleTask(task: Task<TaskKind, TaskMapping[TaskKind]>) {
