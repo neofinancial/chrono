@@ -39,6 +39,10 @@ export class SimpleProcessor<TaskKind extends keyof TaskMapping, TaskMapping ext
     this.taskKind = config.kind;
   }
 
+  /**
+   * Starts multiple concurrent process loops that claim and process tasks.
+   * Max concurrent processes is defined by the `maxConcurrency` property set in the constructor.
+   */
   async start(): Promise<void> {
     if (this.stopRequested || this.exitChannels.length > 0) {
       return;
@@ -59,9 +63,13 @@ export class SimpleProcessor<TaskKind extends keyof TaskMapping, TaskMapping ext
     }
   }
 
+  /**
+   * Stops the processor by signaling all process loops to exit,
+   * then waits for all process loops to finish before resolving.
+   */
   async stop(): Promise<void> {
     const exitPromises = this.exitChannels.map(
-      (channel) => new Promise((resolve) => channel.once('polling.exit', resolve)),
+      (channel) => new Promise((resolve) => channel.once('processloop.exit', resolve)),
     );
 
     this.stopRequested = true;
@@ -69,7 +77,12 @@ export class SimpleProcessor<TaskKind extends keyof TaskMapping, TaskMapping ext
     await Promise.all(exitPromises);
   }
 
-  async runProcessLoop(exitChannel: EventEmitter): Promise<void> {
+  /**
+   * The main loop that processes tasks.
+   *
+   * @param exitChannel The channel to signal when the loop exits.
+   */
+  private async runProcessLoop(exitChannel: EventEmitter): Promise<void> {
     while (!this.stopRequested) {
       const task = await this.datastore.claim({
         kind: this.taskKind,
@@ -89,7 +102,7 @@ export class SimpleProcessor<TaskKind extends keyof TaskMapping, TaskMapping ext
       await setTimeout(this.claimIntervalMs);
     }
 
-    exitChannel.emit('polling.exit');
+    exitChannel.emit('processloop.exit');
   }
 
   private async handleTask(task: Task<TaskKind, TaskMapping[TaskKind]>) {
