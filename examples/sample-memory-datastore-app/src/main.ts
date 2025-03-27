@@ -54,7 +54,9 @@ async function main() {
   console.log('stopping the Chrono instance...');
 
   // Finallly, stop the Chrono instance
-  await chrono.stop();
+  await chrono.stop().catch((error) => {
+    console.error('Error stopping Chrono. Can be due to reaching exit timeout:', error);
+  });
 
   console.log('Chrono instance stopped.');
 }

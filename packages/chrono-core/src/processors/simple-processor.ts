@@ -29,6 +29,7 @@ export class SimpleProcessor<TaskKind extends keyof TaskMapping, TaskMapping ext
 
   readonly claimIntervalMs = 150;
   readonly idleIntervalMs = 5_000;
+  readonly exitTimeoutMs = 60_000;
 
   constructor(config: SimpleProcessorConfig<TaskKind, TaskMapping, DatastoreOptions>) {
     super();
@@ -72,9 +73,13 @@ export class SimpleProcessor<TaskKind extends keyof TaskMapping, TaskMapping ext
       (channel) => new Promise((resolve) => channel.once('processloop.exit', resolve)),
     );
 
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(this.exitTimeoutMs).then(() => reject('Process loop exit timeout')),
+    );
+
     this.stopRequested = true;
 
-    await Promise.all(exitPromises);
+    await Promise.race([Promise.all(exitPromises), timeoutPromise]);
   }
 
   /**
