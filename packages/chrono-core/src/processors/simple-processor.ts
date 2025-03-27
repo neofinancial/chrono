@@ -52,10 +52,10 @@ export class SimpleProcessor<TaskKind extends keyof TaskMapping, TaskMapping ext
       const errorHandler = (error: Error) => {
         this.emit('task-error', { error });
 
-        this.startPolling(exitChannel).catch(errorHandler);
+        this.runProcessLoop(exitChannel).catch(errorHandler);
       };
 
-      this.startPolling(exitChannel).catch(errorHandler);
+      this.runProcessLoop(exitChannel).catch(errorHandler);
     }
   }
 
@@ -69,7 +69,7 @@ export class SimpleProcessor<TaskKind extends keyof TaskMapping, TaskMapping ext
     await Promise.all(exitPromises);
   }
 
-  async startPolling(exitChannel: EventEmitter): Promise<void> {
+  async runProcessLoop(exitChannel: EventEmitter): Promise<void> {
     while (!this.stopRequested) {
       const task = await this.datastore.claim({
         kind: this.taskKind,
