@@ -65,7 +65,7 @@ export class SimpleProcessor<TaskKind extends keyof TaskMapping, TaskMapping ext
 
   async runTask(): Promise<void> {
     while (!this.stopRequested) {
-      const task = await this.datastore.claim<TaskKind>({
+      const task = await this.datastore.claim({
         kind: this.taskKind,
       });
 

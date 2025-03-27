@@ -57,7 +57,7 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> exten
     input: ScheduleTaskInput<TaskKind, TaskMapping[TaskKind], DatastoreOptions>,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
     try {
-      const task = await this.datastore.schedule<TaskKind>({
+      const task = await this.datastore.schedule({
         when: input.when,
         kind: input.kind,
         data: input.data,
@@ -85,7 +85,7 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> exten
       throw new Error('Handler for task kind already exists');
     }
 
-    const processor = createProcessor<TaskKind, TaskMapping, DatastoreOptions>({
+    const processor = createProcessor({
       kind: input.kind,
       datastore: this.datastore,
       handler: input.handler,
