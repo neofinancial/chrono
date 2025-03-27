@@ -1,6 +1,7 @@
+import { TaskStatus } from '@neofinancial/chrono-core';
 import { beforeEach, describe, expect, test } from 'vitest';
 
-import { ChronoMemoryDatastore } from '../../src';
+import { ChronoMemoryDatastore } from '../../src/chrono-memory-datastore';
 
 describe('ChronoMemoryDatastore', () => {
   type DatastoreOptions = Record<string, unknown>;
@@ -33,7 +34,7 @@ describe('ChronoMemoryDatastore', () => {
       expect(result).toEqual({
         id: '0',
         kind: 'send-test-task',
-        status: 'pending',
+        status: TaskStatus.PENDING,
         data,
         priority: 0,
         idempotencyKey: undefined,
@@ -61,7 +62,7 @@ describe('ChronoMemoryDatastore', () => {
       expect(result).toEqual({
         id: '0',
         kind: 'send-test-task',
-        status: 'pending',
+        status: TaskStatus.PENDING,
         data,
         priority: 0,
         idempotencyKey,
