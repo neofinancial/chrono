@@ -3,7 +3,7 @@ import { setTimeout } from 'node:timers/promises';
 
 import type { TaskMappingBase } from '..';
 import type { Datastore, Task } from '../datastore';
-import { type Processor, TaskErrorChannel, TaskRunner } from './processor';
+import { type Processor, TaskRunner } from './processor';
 
 type SimpleProcessorConfig<
   TaskKind extends keyof TaskMapping,
@@ -23,7 +23,7 @@ export class SimpleProcessor<TaskKind extends keyof TaskMapping, TaskMapping ext
   private taskKind: TaskKind;
   private datastore: Datastore<TaskMapping, DatastoreOptions>;
   private handler: (task: Task<TaskKind, TaskMapping[TaskKind]>) => Promise<void>;
-  private runningTasks: Promise<void>[] = [];
+  private runningTasks: TaskRunner[] = [];
   private stopRequested = false;
   private maxConcurrency: number;
 
@@ -40,27 +40,30 @@ export class SimpleProcessor<TaskKind extends keyof TaskMapping, TaskMapping ext
   }
 
   async start(): Promise<void> {
-    if (this.stopRequested || this.runningTasks.length >= 0) {
+    if (this.stopRequested || this.runningTasks.length > 0) {
       return;
     }
 
     for (let i = 0; i < this.maxConcurrency; i++) {
-      const errorChannel = new TaskErrorChannel();
-      const taskRunner = new TaskRunner(i, errorChannel, () => this.runTask());
+      const taskRunner = new TaskRunner(i, () => this.runTask());
 
-      this.runningTasks.push(taskRunner.run());
+      this.runningTasks.push(taskRunner);
 
-      errorChannel.onError((event) => {
-        const taskRunner = new TaskRunner(event.taskIndex, errorChannel, () => this.runTask());
-        this.runningTasks[event.taskIndex] = taskRunner.run();
+      taskRunner.onError((event) => {
+        this.emit('task-runner-error', event);
+        process.nextTick(() => taskRunner.run());
       });
+
+      process.nextTick(() => taskRunner.run());
     }
   }
 
   async stop(): Promise<void> {
+    const exitPromises = Promise.allSettled(this.runningTasks.map((taskRunner) => taskRunner.onceExit()));
+
     this.stopRequested = true;
 
-    await Promise.all(this.runningTasks);
+    await exitPromises;
   }
 
   async runTask(): Promise<void> {
