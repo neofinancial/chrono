@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:stream';
 
 import type { Datastore, ScheduleInput, Task } from './datastore';
 import { type Processor, createProcessor } from './processors';
+import { promiseWithTimeout } from './utils/promise-utils';
 
 export type TaskMappingBase = Record<PropertyKey, unknown>;
 
@@ -51,12 +52,8 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> exten
   public async stop(): Promise<void> {
     const stopPromises = Array.from(this.processors.values()).map((processor) => processor.stop());
 
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject('Process loop exit timeout'), this.exitTimeoutMs),
-    );
-
     try {
-      await Promise.race([Promise.all(stopPromises), timeoutPromise]);
+      await promiseWithTimeout(Promise.all(stopPromises), this.exitTimeoutMs);
     } catch (error) {
       this.emit('stop.failed', { error, timestamp: new Date() });
     } finally {
