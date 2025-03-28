@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:stream';
 
 import type { Datastore, ScheduleInput, Task } from './datastore';
 import { type Processor, createProcessor } from './processors';
+import { promiseWithTimeout } from './utils/promise-utils';
 
 export type TaskMappingBase = Record<PropertyKey, unknown>;
 
@@ -32,6 +33,8 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> exten
   private datastore: Datastore<TaskMapping, DatastoreOptions>;
   private processors: Map<keyof TaskMapping, Processor> = new Map();
 
+  readonly exitTimeoutMs = 60_000;
+
   constructor(datastore: Datastore<TaskMapping, DatastoreOptions>) {
     super();
 
@@ -47,11 +50,15 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> exten
   }
 
   public async stop(): Promise<void> {
-    for (const processor of this.processors.values()) {
-      await processor.stop();
-    }
+    const stopPromises = Array.from(this.processors.values()).map((processor) => processor.stop());
 
-    this.emit('close', { timestamp: new Date() });
+    try {
+      await promiseWithTimeout(Promise.all(stopPromises), this.exitTimeoutMs);
+    } catch (error) {
+      this.emit('stop.failed', { error, timestamp: new Date() });
+    } finally {
+      this.emit('close', { timestamp: new Date() });
+    }
   }
 
   public async scheduleTask<TaskKind extends keyof TaskMapping>(
