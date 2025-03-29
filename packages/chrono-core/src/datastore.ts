@@ -35,7 +35,7 @@ export type ScheduleInput<TaskKind, TaskData, DatastoreOptions> = {
   when: Date;
   kind: TaskKind;
   data: TaskData;
-  priority?: 0;
+  priority?: number;
   idempotencyKey?: string;
   datastoreOptions?: DatastoreOptions;
 };

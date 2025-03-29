@@ -5,6 +5,9 @@
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "files": ["build/**"],
+  "keywords": [],
+  "author": "Neo Financial Engineering <engineering@neofinancial.com>",
+  "license": "MIT",
   "scripts": {
     "clean": "rimraf ./build",
     "build": "tsc",
@@ -13,8 +16,5 @@
   },
   "dependencies": {
     "@neofinancial/chrono-core": "workspace:*"
-  },
-  "keywords": [],
-  "author": "Neo Financial Engineering <engineering@neofinancial.com>",
-  "license": "MIT"
+  }
 }
