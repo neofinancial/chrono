@@ -16,7 +16,11 @@ type SimpleProcessorConfig<
   maxConcurrency: number;
 };
 
-export class SimpleProcessor<TaskKind extends keyof TaskMapping, TaskMapping extends TaskMappingBase, DatastoreOptions>
+export class SimpleProcessor<
+    TaskKind extends Extract<keyof TaskMapping, string>,
+    TaskMapping extends TaskMappingBase,
+    DatastoreOptions,
+  >
   extends EventEmitter
   implements Processor
 {

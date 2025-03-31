@@ -19,7 +19,7 @@ export type CreateProcessorInput<
 };
 
 export function createProcessor<
-  TaskKind extends keyof TaskMapping,
+  TaskKind extends Extract<keyof TaskMapping, string>,
   TaskMapping extends TaskMappingBase,
   DatastoreOptions,
 >(input: CreateProcessorInput<TaskKind, TaskMapping, DatastoreOptions>): Processor {

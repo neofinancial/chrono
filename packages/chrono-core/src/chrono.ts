@@ -4,7 +4,7 @@ import type { Datastore, ScheduleInput, Task } from './datastore';
 import { type Processor, createProcessor } from './processors';
 import { promiseWithTimeout } from './utils/promise-utils';
 
-export type TaskMappingBase = Record<PropertyKey, unknown>;
+export type TaskMappingBase = Record<string, unknown>;
 
 export type ScheduleTaskInput<TaskKind, TaskData, DatastoreOptions> = ScheduleInput<
   TaskKind,
@@ -86,7 +86,7 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> exten
     }
   }
 
-  public registerTaskHandler<TaskKind extends keyof TaskMapping>(
+  public registerTaskHandler<TaskKind extends Extract<keyof TaskMapping, string>>(
     input: RegisterTaskHandlerInput<TaskKind, TaskMapping[TaskKind]>,
   ): Processor {
     if (this.processors.has(input.kind)) {
