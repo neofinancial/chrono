@@ -29,8 +29,8 @@ async function main() {
 
   // you can attach event listeners to the processors
   const taskCompletions = [
-    new Promise((resolve) => processor1.once('task-completed', resolve)),
-    new Promise((resolve) => processor2.once('task-completed', resolve)),
+    new Promise((resolve) => processor1.once('task.completed', resolve)),
+    new Promise((resolve) => processor2.once('task.completed', resolve)),
   ];
 
   // Start the Chrono instance
