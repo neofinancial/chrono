@@ -3,7 +3,7 @@ import { describe, expect, test, vitest } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 
 import { Chrono } from '../../src/chrono';
-import type { Datastore, Task } from '../../src/datastore';
+import { type Datastore, type Task, TaskStatus } from '../../src/datastore';
 
 describe('Chrono', () => {
   type TaskData = { someField: number };
@@ -11,8 +11,7 @@ describe('Chrono', () => {
     'send-test-task': TaskData;
   };
   type DatastoreOptions = Record<string, unknown>;
-
-  const mockDatastore = mock<Datastore<keyof TaskMapping, TaskData, DatastoreOptions>>();
+  const mockDatastore = mock<Datastore<TaskMapping, DatastoreOptions>>();
 
   const chrono = new Chrono<TaskMapping, DatastoreOptions>(mockDatastore);
 
@@ -46,7 +45,7 @@ describe('Chrono', () => {
     const mockScheduleOutput: Task<keyof TaskMapping, TaskData> = {
       id: faker.string.nanoid(),
       kind: 'send-test-task',
-      status: 'pending',
+      status: TaskStatus.PENDING,
       data: { someField: 1 },
       priority: 0,
       idempotencyKey: faker.string.nanoid(),
@@ -95,7 +94,7 @@ describe('Chrono', () => {
       });
 
       expect(emitSpy).toHaveBeenCalledOnce();
-      expect(emitSpy).toHaveBeenCalledWith('task-scheduled', {
+      expect(emitSpy).toHaveBeenCalledWith('task.scheduled', {
         task: mockScheduleOutput,
         timestamp: expect.any(Date),
       });
@@ -117,7 +116,7 @@ describe('Chrono', () => {
       await expect(chrono.scheduleTask(mockScheduleTaskInput)).rejects.toThrow('Failed to schedule task');
 
       expect(emitSpy).toHaveBeenCalledOnce();
-      expect(emitSpy).toHaveBeenCalledWith('task-schedule-failed', {
+      expect(emitSpy).toHaveBeenCalledWith('task.schedule.failed', {
         error: mockDatastoreError,
         input: mockScheduleTaskInput,
         timestamp: expect.any(Date),

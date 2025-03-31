@@ -72,11 +72,11 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> exten
         datastoreOptions: input.datastoreOptions,
       });
 
-      this.emit('task-scheduled', { task, timestamp: new Date() });
+      this.emit('task.scheduled', { task, timestamp: new Date() });
 
       return task;
     } catch (error) {
-      this.emit('task-schedule-failed', {
+      this.emit('task.schedule.failed', {
         error,
         input,
         timestamp: new Date(),

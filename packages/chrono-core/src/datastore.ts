@@ -1,4 +1,4 @@
-import type { TaskMappingBase } from '.';
+import type { TaskMappingBase } from './chrono';
 
 export const TaskStatus = {
   PENDING: 'PENDING',
