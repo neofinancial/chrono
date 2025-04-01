@@ -85,7 +85,10 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
           ],
         },
         { $set: { status: TaskStatus.CLAIMED, claimedAt: now } },
-        { sort: { priority: -1 }, returnDocument: 'after' },
+        {
+          sort: { priority: -1, scheduledAt: 1 },
+          returnDocument: 'after',
+        },
       );
 
     return task ? this.toObject(task) : undefined;
