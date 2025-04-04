@@ -1,9 +1,11 @@
-import { MongoClient, ObjectId } from 'mongodb';
+import { type Collection, MongoClient, ObjectId } from 'mongodb';
 import { afterAll, beforeAll, beforeEach, describe, expect, test, vitest } from 'vitest';
 
+import { faker } from '@faker-js/faker';
 import { TaskStatus } from '@neofinancial/chrono-core';
-import { ChronoMongoDatastore } from '../../src/chrono-mongo-datastore';
+import { ChronoMongoDatastore, type TaskDocument } from '../../src/chrono-mongo-datastore';
 import { DB_NAME } from '../database-setup';
+import { defineTaskFactory } from '../factories/task.factory';
 
 type TaskMapping = {
   test: {
@@ -16,20 +18,26 @@ const TEST_CLAIM_STALE_TIMEOUT = 1000; // 1 second
 
 describe('ChronoMongoDatastore', () => {
   let mongoClient: MongoClient;
-  let chrono: ChronoMongoDatastore<TaskMapping>;
+  let collection: Collection<TaskDocument<keyof TaskMapping, TaskMapping[keyof TaskMapping]>>;
+  let dataStore: ChronoMongoDatastore<TaskMapping>;
+  const taskFactory = defineTaskFactory<TaskMapping>('test', {
+    test: 'test',
+  });
 
   beforeAll(async () => {
     mongoClient = new MongoClient('mongodb://localhost:27017');
     await mongoClient.connect();
 
-    chrono = new ChronoMongoDatastore(mongoClient.db(DB_NAME), {
+    collection = mongoClient.db(DB_NAME).collection(TEST_DB_COLLECTION_NAME);
+
+    dataStore = new ChronoMongoDatastore(mongoClient.db(DB_NAME), {
       collectionName: TEST_DB_COLLECTION_NAME,
       claimStaleTimeout: TEST_CLAIM_STALE_TIMEOUT,
     });
   });
 
   beforeEach(async () => {
-    await mongoClient.db(DB_NAME).collection(TEST_DB_COLLECTION_NAME).drop();
+    await collection.drop();
   });
 
   afterAll(async () => {
@@ -46,7 +54,7 @@ describe('ChronoMongoDatastore', () => {
       };
 
       test('should return task with correct properties', async () => {
-        const task = await chrono.schedule(input);
+        const task = await dataStore.schedule(input);
 
         expect(task).toEqual(
           expect.objectContaining({
@@ -62,14 +70,11 @@ describe('ChronoMongoDatastore', () => {
       });
 
       test('should store task in the database', async () => {
-        const task = await chrono.schedule(input);
+        const task = await dataStore.schedule(input);
 
-        const storedTask = await mongoClient
-          .db(DB_NAME)
-          .collection(TEST_DB_COLLECTION_NAME)
-          .findOne({
-            _id: new ObjectId(task.id),
-          });
+        const storedTask = await collection.findOne({
+          _id: new ObjectId(task.id),
+        });
 
         expect(storedTask).toEqual(
           expect.objectContaining({
@@ -94,11 +99,11 @@ describe('ChronoMongoDatastore', () => {
     };
 
     test('should claim task in PENDING state with scheduledAt in the past', async () => {
-      const task = await chrono.schedule({
+      const task = await dataStore.schedule({
         ...input,
         when: new Date(Date.now() - 1000),
       });
-      const claimedTask = await chrono.claim({
+      const claimedTask = await dataStore.claim({
         kind: input.kind,
       });
       expect(claimedTask).toEqual(
@@ -111,20 +116,20 @@ describe('ChronoMongoDatastore', () => {
     });
 
     test('should claim task in CLAIMED state with claimedAt in the past', async () => {
-      const scheduledTask = await chrono.schedule(input);
+      const scheduledTask = await dataStore.schedule(input);
 
-      const claimedTask = await chrono.claim({
+      const claimedTask = await dataStore.claim({
         kind: input.kind,
       });
 
-      const claimedTaskAgain = await chrono.claim({
+      const claimedTaskAgain = await dataStore.claim({
         kind: input.kind,
       });
 
       const fakeTimer = vitest.useFakeTimers();
       fakeTimer.setSystemTime(new Date((claimedTask?.claimedAt?.getTime() as number) + TEST_CLAIM_STALE_TIMEOUT + 1));
 
-      const claimedTaskAgainAgain = await chrono.claim({
+      const claimedTaskAgainAgain = await dataStore.claim({
         kind: input.kind,
       });
       fakeTimer.useRealTimers();
@@ -152,17 +157,17 @@ describe('ChronoMongoDatastore', () => {
     });
 
     test('should only be able to claim 1 task at a time', async () => {
-      const task1 = await chrono.schedule(input);
-      const task2 = await chrono.schedule(input);
+      const task1 = await dataStore.schedule(input);
+      const task2 = await dataStore.schedule(input);
 
       const claimedTasks = await Promise.all([
-        chrono.claim({
+        dataStore.claim({
           kind: input.kind,
         }),
-        chrono.claim({
+        dataStore.claim({
           kind: input.kind,
         }),
-        chrono.claim({
+        dataStore.claim({
           kind: input.kind,
         }),
       ]);
@@ -176,6 +181,80 @@ describe('ChronoMongoDatastore', () => {
       expect(claimedTasks.find((task) => task?.id === task2.id)).toEqual(
         expect.objectContaining({ id: task2.id, status: TaskStatus.CLAIMED }),
       );
+    });
+  });
+
+  describe('complete', () => {
+    test('should mark task as completed', async () => {
+      const task = await dataStore.schedule({
+        kind: 'test',
+        data: { test: 'test' },
+        priority: 1,
+        when: new Date(),
+      });
+
+      const completedTask = await dataStore.complete(task.id);
+      const taskDocument = collection.findOne({
+        _id: new ObjectId(task.id),
+      });
+
+      expect(taskDocument).resolves.toEqual(
+        expect.objectContaining({
+          kind: task.kind,
+          status: TaskStatus.COMPLETED,
+          completedAt: expect.any(Date),
+        }),
+      );
+      expect(completedTask).toEqual(
+        expect.objectContaining({
+          id: task.id,
+          kind: task.kind,
+          status: TaskStatus.COMPLETED,
+          completedAt: expect.any(Date),
+        }),
+      );
+    });
+
+    test('should throw an error if task is not found', async () => {
+      const taskId = faker.database.mongodbObjectId();
+
+      await expect(() => dataStore.complete(taskId)).rejects.toThrow(`Task with ID ${taskId} not found`);
+    });
+  });
+
+  describe('fail', () => {
+    test('should mark task as failed', async () => {
+      const task = await dataStore.schedule({
+        kind: 'test',
+        data: { test: 'test' },
+        priority: 1,
+        when: new Date(),
+      });
+
+      const failedTask = await dataStore.fail(task.id);
+      const taskDocument = collection.findOne({
+        _id: new ObjectId(task.id),
+      });
+
+      expect(taskDocument).resolves.toEqual(
+        expect.objectContaining({
+          kind: task.kind,
+          status: TaskStatus.FAILED,
+        }),
+      );
+      expect(failedTask).toEqual(
+        expect.objectContaining({
+          id: task.id,
+          kind: task.kind,
+          status: TaskStatus.FAILED,
+        }),
+      );
+    });
+
+    test('should throw an error if task is not found', async () => {
+      const taskId = faker.database.mongodbObjectId();
+
+      await expect(() => dataStore.fail(taskId)).rejects.toThrow(`Task with ID ${taskId} not found`);
     });
   });
 });

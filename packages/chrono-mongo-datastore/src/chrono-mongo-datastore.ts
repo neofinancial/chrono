@@ -6,7 +6,7 @@ import {
   TaskStatus,
 } from '@neofinancial/chrono-core';
 import type { ClaimTaskInput } from '@neofinancial/chrono-core/build/datastore';
-import type { ClientSession, Db, OptionalId, WithId } from 'mongodb';
+import { type ClientSession, type Db, ObjectId, type OptionalId, type WithId } from 'mongodb';
 
 const DEFAULT_COLLECTION_NAME = 'chrono-tasks';
 const DEFAULT_COMPLETED_DOCUMENT_TTL = 60 * 60 * 24; // 1 day
@@ -22,7 +22,7 @@ export type MongoDatastoreOptions = {
   session?: ClientSession;
 };
 
-type TaskDocument<TaskKind, TaskData> = WithId<Omit<Task<TaskKind, TaskData>, 'id'>>;
+export type TaskDocument<TaskKind, TaskData> = WithId<Omit<Task<TaskKind, TaskData>, 'id'>>;
 
 export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
   implements Datastore<TaskMapping, MongoDatastoreOptions>
@@ -94,12 +94,50 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     return task ? this.toObject(task) : undefined;
   }
 
-  async complete<TaskKind extends keyof TaskMapping>(_taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
-    throw new Error('Method not implemented.');
+  async complete<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
+    const now = new Date();
+
+    const task = await this.database
+      .collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>>(this.config.collectionName)
+      .findOneAndUpdate(
+        { _id: new ObjectId(taskId) },
+        {
+          $set: {
+            status: TaskStatus.COMPLETED,
+            completedAt: now,
+          },
+        },
+        {
+          returnDocument: 'after',
+        },
+      );
+
+    if (!task) {
+      throw new Error(`Task with ID ${taskId} not found`);
+    }
+
+    return this.toObject(task);
   }
 
-  async fail<TaskKind extends keyof TaskMapping>(_taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
-    throw new Error('Method not implemented.');
+  async fail<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
+    const now = new Date();
+    const task = await this.database
+      .collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>>(this.config.collectionName)
+      .findOneAndUpdate(
+        { _id: new ObjectId(taskId) },
+        {
+          $set: {
+            status: TaskStatus.FAILED,
+          },
+        },
+        {
+          returnDocument: 'after',
+        },
+      );
+    if (!task) {
+      throw new Error(`Task with ID ${taskId} not found`);
+    }
+    return this.toObject(task);
   }
 
   private toObject<TaskKind extends keyof TaskMapping>(
