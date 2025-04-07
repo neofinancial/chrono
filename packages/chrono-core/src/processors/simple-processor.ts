@@ -150,22 +150,22 @@ export class SimpleProcessor<
   private async handleTaskError(task: Task<TaskKind, TaskMapping[TaskKind]>, error: Error): Promise<void> {
     if (task.retryCount >= this.taskHandlerMaxRetries) {
       // Mark the task as failed
+      await this.datastore.fail(task.id);
       this.emit('task.failed', {
         task,
         error,
         timestamp: new Date(),
       });
-      await this.datastore.fail(task.id);
 
       return;
     }
 
     // If the task has not reached the max retries, unclaim it
+    await this.datastore.unclaim(task.id);
     this.emit('task.unclaimed', {
       task,
       error,
       timestamp: new Date(),
     });
-    await this.datastore.unclaim(task.id);
   }
 }
