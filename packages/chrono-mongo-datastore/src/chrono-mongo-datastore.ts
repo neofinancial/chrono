@@ -76,7 +76,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
         {
           kind: input.kind,
           $or: [
-            { status: TaskStatus.PENDING, scheduledAt: { $lt: now } },
+            { status: TaskStatus.PENDING, scheduledAt: { $lte: now } },
             {
               status: TaskStatus.CLAIMED,
               claimedAt: {
