@@ -40,6 +40,9 @@ describe('ChronoMemoryDatastore', () => {
         idempotencyKey: undefined,
         originalScheduleDate: when,
         scheduledAt: when,
+        claimedAt: undefined,
+        lastExecutedAt: undefined,
+        completedAt: undefined,
         retryCount: 0,
       });
     });
@@ -69,6 +72,8 @@ describe('ChronoMemoryDatastore', () => {
         idempotencyKey,
         originalScheduleDate: when,
         scheduledAt: when,
+        lastExecutedAt: undefined,
+        completedAt: undefined,
         retryCount: 0,
       });
     });

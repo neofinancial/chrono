@@ -29,6 +29,8 @@ export type Task<TaskKind, TaskData> = {
   claimedAt?: Date;
   /** The date the task is mark 'completed' */
   completedAt?: Date;
+  /** The date when the task was last executed (if any) */
+  lastExecutedAt?: Date;
   /** A counter to track the number of times the task has been retried */
   retryCount: number;
 };

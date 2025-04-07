@@ -69,6 +69,7 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
 
     if (claimedTask) {
       claimedTask.status = TaskStatus.CLAIMED;
+      claimedTask.claimedAt = new Date();
 
       return claimedTask;
     }
@@ -88,6 +89,8 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
     if (task) {
       task.status = TaskStatus.PENDING;
       task.retryCount += 1;
+      task.claimedAt = undefined;
+      task.lastExecutedAt = new Date();
 
       return task;
     }
@@ -106,8 +109,13 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
       (t): t is Task<TaskKind, TaskMapping[TaskKind]> => t.id === taskId,
     );
 
+    const now = new Date();
+
     if (task) {
       task.status = TaskStatus.COMPLETED;
+      task.completedAt = now;
+      task.lastExecutedAt = now;
+      task.claimedAt = undefined;
 
       return task;
     }
@@ -128,6 +136,8 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
 
     if (task) {
       task.status = TaskStatus.FAILED;
+      task.claimedAt = undefined;
+      task.lastExecutedAt = new Date();
 
       return task;
     }

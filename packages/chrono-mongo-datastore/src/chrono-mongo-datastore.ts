@@ -110,6 +110,8 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
           $set: {
             status: TaskStatus.COMPLETED,
             completedAt: now,
+            lastExecutedAt: now,
+            claimedAt: undefined,
           },
         },
         {
@@ -126,6 +128,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
 
   async fail<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
     const now = new Date();
+
     const task = await this.database
       .collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>>(this.config.collectionName)
       .findOneAndUpdate(
@@ -133,6 +136,8 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
         {
           $set: {
             status: TaskStatus.FAILED,
+            claimedAt: undefined,
+            lastExecutedAt: now,
           },
         },
         {
