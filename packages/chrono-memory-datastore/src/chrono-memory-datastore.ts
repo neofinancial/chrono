@@ -76,7 +76,7 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
   }
 
   /**
-   * Unclaims a task and returns it.
+   * Unclaims a task and returns it. Primarily used for retrying tasks.
    *
    * @param taskId The ID of the task to unclaim.
    * @returns The unclaimed task.
