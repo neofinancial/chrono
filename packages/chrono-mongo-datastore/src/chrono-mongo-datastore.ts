@@ -52,6 +52,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
       idempotencyKey: input.idempotencyKey,
       originalScheduleDate: input.when,
       scheduledAt: now,
+      retryCount: 0,
     };
 
     const results = await this.database.collection(this.config.collectionName).insertOne(createInput, {
@@ -92,6 +93,10 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
       );
 
     return task ? this.toObject(task) : undefined;
+  }
+
+  async unclaim<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
+    throw new Error('Method not implemented.');
   }
 
   async complete<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
@@ -154,6 +159,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
       scheduledAt: document.scheduledAt,
       claimedAt: document.claimedAt ?? undefined,
       completedAt: document.completedAt ?? undefined,
+      retryCount: document.retryCount,
     };
   }
 }

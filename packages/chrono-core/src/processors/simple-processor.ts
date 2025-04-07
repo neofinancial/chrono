@@ -35,6 +35,7 @@ export class SimpleProcessor<
   readonly claimIntervalMs = 150;
   readonly idleIntervalMs = 5_000;
   readonly taskHandlerTimeoutMs = 60_000;
+  readonly taskHandlerMaxRetries = 10;
 
   constructor(config: SimpleProcessorConfig<TaskKind, TaskMapping, DatastoreOptions>) {
     super();
@@ -125,12 +126,7 @@ export class SimpleProcessor<
     try {
       await promiseWithTimeout(this.handler(task), this.taskHandlerTimeoutMs);
     } catch (error) {
-      await this.datastore.fail(task.id);
-
-      this.emit('task.failed', {
-        task,
-        timestamp: new Date(),
-      });
+      await this.handleTaskError(task, error as Error);
 
       return;
     }
@@ -149,5 +145,27 @@ export class SimpleProcessor<
         timestamp: new Date(),
       });
     }
+  }
+
+  private async handleTaskError(task: Task<TaskKind, TaskMapping[TaskKind]>, error: Error): Promise<void> {
+    if (task.retryCount >= this.taskHandlerMaxRetries) {
+      // Mark the task as failed
+      this.emit('task.failed', {
+        task,
+        error,
+        timestamp: new Date(),
+      });
+      await this.datastore.fail(task.id);
+
+      return;
+    }
+
+    // If the task has not reached the max retries, unclaim it
+    this.emit('task.unclaimed', {
+      task,
+      error,
+      timestamp: new Date(),
+    });
+    await this.datastore.unclaim(task.id);
   }
 }

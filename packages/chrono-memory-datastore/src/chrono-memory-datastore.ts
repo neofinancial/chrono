@@ -46,6 +46,7 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
       idempotencyKey: input.idempotencyKey,
       originalScheduleDate: input.when,
       scheduledAt: input.when,
+      retryCount: 0,
     };
 
     this.store.set(id, task);
@@ -74,6 +75,27 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
   }
 
   /**
+   * Unclaims a task and returns it.
+   *
+   * @param taskId The ID of the task to unclaim.
+   * @returns The unclaimed task.
+   */
+  async unclaim<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
+    const task = Array.from(this.store.values()).find(
+      (t): t is Task<TaskKind, TaskMapping[TaskKind]> => t.id === taskId && t.status === TaskStatus.CLAIMED,
+    );
+
+    if (task) {
+      task.status = TaskStatus.PENDING;
+      task.retryCount += 1;
+
+      return task;
+    }
+
+    throw new Error(`Task with id ${taskId} not found`);
+  }
+
+  /**
    * Marks a task as completed and returns the task.
    *
    * @param taskId The ID of the task to mark as completed.
@@ -92,6 +114,7 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
 
     throw new Error(`Task with id ${taskId} not found`);
   }
+
   /**
    * Marks a task as failed and returns the task.
    *

@@ -65,6 +65,7 @@ describe('ChronoMongoDatastore', () => {
             originalScheduleDate: expect.any(Date),
             scheduledAt: expect.any(Date),
             id: expect.any(String),
+            retryCount: 0,
           }),
         );
       });
@@ -84,6 +85,7 @@ describe('ChronoMongoDatastore', () => {
             priority: input.priority,
             originalScheduleDate: expect.any(Date),
             scheduledAt: expect.any(Date),
+            retryCount: 0,
           }),
         );
       });
