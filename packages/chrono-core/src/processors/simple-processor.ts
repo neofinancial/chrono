@@ -163,7 +163,8 @@ export class SimpleProcessor<
     }
 
     // If the task has not reached the max retries, unclaim it
-    await this.datastore.unclaim(task.id, addMilliseconds(new Date(), this.taskHandlerRetryIntervalMs));
+    const nextScheduledAt = addMilliseconds(new Date(), this.taskHandlerRetryIntervalMs);
+    await this.datastore.unclaim(task.id, nextScheduledAt);
     this.emit('task.unclaimed', {
       task,
       error,
