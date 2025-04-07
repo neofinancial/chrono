@@ -55,7 +55,10 @@ export interface Datastore<TaskMapping extends TaskMappingBase, DatastoreOptions
   claim<TaskKind extends Extract<keyof TaskMapping, string>>(
     input: ClaimTaskInput<TaskKind>,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined>;
-  unclaim<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
+  unclaim<TaskKind extends keyof TaskMapping>(
+    taskId: string,
+    scheduledAt: Date,
+  ): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
   complete<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
   fail<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
 }

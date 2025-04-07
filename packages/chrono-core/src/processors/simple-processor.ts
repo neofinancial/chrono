@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:stream';
 import { setTimeout } from 'node:timers/promises';
+import { addMilliseconds } from 'date-fns/addMilliseconds';
 
 import type { TaskMappingBase } from '../chrono';
 import type { Datastore, Task } from '../datastore';
@@ -36,6 +37,7 @@ export class SimpleProcessor<
   readonly idleIntervalMs = 5_000;
   readonly taskHandlerTimeoutMs = 60_000;
   readonly taskHandlerMaxRetries = 10;
+  readonly taskHandlerRetryIntervalMs = 5_000;
 
   constructor(config: SimpleProcessorConfig<TaskKind, TaskMapping, DatastoreOptions>) {
     super();
@@ -161,7 +163,7 @@ export class SimpleProcessor<
     }
 
     // If the task has not reached the max retries, unclaim it
-    await this.datastore.unclaim(task.id);
+    await this.datastore.unclaim(task.id, addMilliseconds(new Date(), this.taskHandlerRetryIntervalMs));
     this.emit('task.unclaimed', {
       task,
       error,

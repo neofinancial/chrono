@@ -42,8 +42,6 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
   async schedule<TaskKind extends keyof TaskMapping>(
     input: ScheduleInput<TaskKind, TaskMapping[TaskKind], MongoDatastoreOptions>,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
-    const now = new Date();
-
     const createInput: OptionalId<TaskDocument<TaskKind, TaskMapping[TaskKind]>> = {
       kind: input.kind,
       status: TaskStatus.PENDING,
@@ -51,7 +49,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
       priority: input.priority,
       idempotencyKey: input.idempotencyKey,
       originalScheduleDate: input.when,
-      scheduledAt: now,
+      scheduledAt: input.when,
       retryCount: 0,
     };
 
@@ -95,7 +93,10 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     return task ? this.toObject(task) : undefined;
   }
 
-  async unclaim<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
+  async unclaim<TaskKind extends keyof TaskMapping>(
+    _taskId: string,
+    _scheduledAt: Date,
+  ): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
     throw new Error('Method not implemented.');
   }
 
