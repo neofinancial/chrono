@@ -95,7 +95,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
 
   async unclaim<TaskKind extends keyof TaskMapping>(
     _taskId: string,
-    _scheduledAt: Date,
+    _nextScheduledAt: Date,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
     throw new Error('Method not implemented.');
   }

@@ -83,7 +83,7 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
    */
   async unclaim<TaskKind extends keyof TaskMapping>(
     taskId: string,
-    scheduledAt: Date,
+    nextScheduledAt: Date,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
     const task = Array.from(this.store.values()).find(
       (t): t is Task<TaskKind, TaskMapping[TaskKind]> => t.id === taskId && t.status === TaskStatus.CLAIMED,
@@ -94,7 +94,7 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
       task.retryCount += 1;
       task.claimedAt = undefined;
       task.lastExecutedAt = new Date();
-      task.scheduledAt = scheduledAt;
+      task.scheduledAt = nextScheduledAt;
 
       return task;
     }
