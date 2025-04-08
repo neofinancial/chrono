@@ -1,6 +1,5 @@
 import { EventEmitter } from 'node:stream';
 import { setTimeout } from 'node:timers/promises';
-import { addMilliseconds } from 'date-fns/addMilliseconds';
 
 import type { TaskMappingBase } from '../chrono';
 import type { Datastore, Task } from '../datastore';
@@ -163,7 +162,7 @@ export class SimpleProcessor<
     }
 
     // If the task has not reached the max retries, unclaim it
-    const nextScheduledAt = addMilliseconds(new Date(), this.taskHandlerRetryIntervalMs);
+    const nextScheduledAt = new Date(Date.now() + this.taskHandlerRetryIntervalMs);
     await this.datastore.unclaim(task.id, nextScheduledAt);
     this.emit('task.unclaimed', {
       task,
