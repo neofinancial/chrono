@@ -42,8 +42,6 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
   async schedule<TaskKind extends keyof TaskMapping>(
     input: ScheduleInput<TaskKind, TaskMapping[TaskKind], MongoDatastoreOptions>,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
-    const now = new Date();
-
     const createInput: OptionalId<TaskDocument<TaskKind, TaskMapping[TaskKind]>> = {
       kind: input.kind,
       status: TaskStatus.PENDING,
@@ -51,7 +49,8 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
       priority: input.priority,
       idempotencyKey: input.idempotencyKey,
       originalScheduleDate: input.when,
-      scheduledAt: now,
+      scheduledAt: input.when,
+      retryCount: 0,
     };
 
     const results = await this.database.collection(this.config.collectionName).insertOne(createInput, {
@@ -75,7 +74,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
         {
           kind: input.kind,
           $or: [
-            { status: TaskStatus.PENDING, scheduledAt: { $lt: now } },
+            { status: TaskStatus.PENDING, scheduledAt: { $lte: now } },
             {
               status: TaskStatus.CLAIMED,
               claimedAt: {
@@ -94,6 +93,13 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     return task ? this.toObject(task) : undefined;
   }
 
+  async unclaim<TaskKind extends keyof TaskMapping>(
+    _taskId: string,
+    _nextScheduledAt: Date,
+  ): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
+    throw new Error('Method not implemented.');
+  }
+
   async complete<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
     const now = new Date();
 
@@ -105,6 +111,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
           $set: {
             status: TaskStatus.COMPLETED,
             completedAt: now,
+            lastExecutedAt: now,
           },
         },
         {
@@ -121,6 +128,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
 
   async fail<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
     const now = new Date();
+
     const task = await this.database
       .collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>>(this.config.collectionName)
       .findOneAndUpdate(
@@ -128,6 +136,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
         {
           $set: {
             status: TaskStatus.FAILED,
+            lastExecutedAt: now,
           },
         },
         {
@@ -154,6 +163,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
       scheduledAt: document.scheduledAt,
       claimedAt: document.claimedAt ?? undefined,
       completedAt: document.completedAt ?? undefined,
+      retryCount: document.retryCount,
     };
   }
 }

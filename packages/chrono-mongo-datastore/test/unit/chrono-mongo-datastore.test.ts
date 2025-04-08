@@ -1,11 +1,10 @@
+import { faker } from '@faker-js/faker';
+import { TaskStatus } from '@neofinancial/chrono-core';
 import { type Collection, MongoClient, ObjectId } from 'mongodb';
 import { afterAll, beforeAll, beforeEach, describe, expect, test, vitest } from 'vitest';
 
-import { faker } from '@faker-js/faker';
-import { TaskStatus } from '@neofinancial/chrono-core';
 import { ChronoMongoDatastore, type TaskDocument } from '../../src/chrono-mongo-datastore';
 import { DB_NAME } from '../database-setup';
-import { defineTaskFactory } from '../factories/task.factory';
 
 type TaskMapping = {
   test: {
@@ -20,9 +19,6 @@ describe('ChronoMongoDatastore', () => {
   let mongoClient: MongoClient;
   let collection: Collection<TaskDocument<keyof TaskMapping, TaskMapping[keyof TaskMapping]>>;
   let dataStore: ChronoMongoDatastore<TaskMapping>;
-  const taskFactory = defineTaskFactory<TaskMapping>('test', {
-    test: 'test',
-  });
 
   beforeAll(async () => {
     mongoClient = new MongoClient('mongodb://localhost:27017');
@@ -65,6 +61,7 @@ describe('ChronoMongoDatastore', () => {
             originalScheduleDate: expect.any(Date),
             scheduledAt: expect.any(Date),
             id: expect.any(String),
+            retryCount: 0,
           }),
         );
       });
@@ -84,6 +81,7 @@ describe('ChronoMongoDatastore', () => {
             priority: input.priority,
             originalScheduleDate: expect.any(Date),
             scheduledAt: expect.any(Date),
+            retryCount: 0,
           }),
         );
       });

@@ -46,6 +46,7 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
       idempotencyKey: input.idempotencyKey,
       originalScheduleDate: input.when,
       scheduledAt: input.when,
+      retryCount: 0,
     };
 
     this.store.set(id, task);
@@ -68,9 +69,37 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
 
     if (claimedTask) {
       claimedTask.status = TaskStatus.CLAIMED;
+      claimedTask.claimedAt = new Date();
 
       return claimedTask;
     }
+  }
+
+  /**
+   * Unclaims a task and returns it. Primarily used for retrying tasks.
+   *
+   * @param taskId The ID of the task to unclaim.
+   * @returns The unclaimed task.
+   */
+  async unclaim<TaskKind extends keyof TaskMapping>(
+    taskId: string,
+    nextScheduledAt: Date,
+  ): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
+    const task = Array.from(this.store.values()).find(
+      (t): t is Task<TaskKind, TaskMapping[TaskKind]> => t.id === taskId && t.status === TaskStatus.CLAIMED,
+    );
+
+    if (task) {
+      task.status = TaskStatus.PENDING;
+      task.retryCount += 1;
+      task.claimedAt = undefined;
+      task.lastExecutedAt = new Date();
+      task.scheduledAt = nextScheduledAt;
+
+      return task;
+    }
+
+    throw new Error(`Task with id ${taskId} not found`);
   }
 
   /**
@@ -84,14 +113,19 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
       (t): t is Task<TaskKind, TaskMapping[TaskKind]> => t.id === taskId,
     );
 
+    const now = new Date();
+
     if (task) {
       task.status = TaskStatus.COMPLETED;
+      task.completedAt = now;
+      task.lastExecutedAt = now;
 
       return task;
     }
 
     throw new Error(`Task with id ${taskId} not found`);
   }
+
   /**
    * Marks a task as failed and returns the task.
    *
@@ -105,6 +139,7 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
 
     if (task) {
       task.status = TaskStatus.FAILED;
+      task.lastExecutedAt = new Date();
 
       return task;
     }

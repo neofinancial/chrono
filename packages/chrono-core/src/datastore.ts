@@ -29,6 +29,10 @@ export type Task<TaskKind, TaskData> = {
   claimedAt?: Date;
   /** The date the task is mark 'completed' */
   completedAt?: Date;
+  /** The date when the task was last executed (if any) */
+  lastExecutedAt?: Date;
+  /** A counter to track the number of times the task has been retried */
+  retryCount: number;
 };
 
 export type ScheduleInput<TaskKind, TaskData, DatastoreOptions> = {
@@ -51,6 +55,10 @@ export interface Datastore<TaskMapping extends TaskMappingBase, DatastoreOptions
   claim<TaskKind extends Extract<keyof TaskMapping, string>>(
     input: ClaimTaskInput<TaskKind>,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined>;
+  unclaim<TaskKind extends keyof TaskMapping>(
+    taskId: string,
+    nextScheduledAt: Date,
+  ): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
   complete<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
   fail<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
 }
