@@ -112,7 +112,6 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
             status: TaskStatus.COMPLETED,
             completedAt: now,
             lastExecutedAt: now,
-            claimedAt: undefined,
           },
         },
         {
@@ -137,7 +136,6 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
         {
           $set: {
             status: TaskStatus.FAILED,
-            claimedAt: undefined,
             lastExecutedAt: now,
           },
         },
