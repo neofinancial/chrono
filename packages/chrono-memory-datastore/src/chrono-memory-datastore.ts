@@ -119,7 +119,6 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
       task.status = TaskStatus.COMPLETED;
       task.completedAt = now;
       task.lastExecutedAt = now;
-      task.claimedAt = undefined;
 
       return task;
     }
@@ -140,7 +139,6 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
 
     if (task) {
       task.status = TaskStatus.FAILED;
-      task.claimedAt = undefined;
       task.lastExecutedAt = new Date();
 
       return task;
