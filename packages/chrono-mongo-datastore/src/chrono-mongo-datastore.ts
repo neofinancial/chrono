@@ -18,13 +18,12 @@ import {
 import { IndexNames, ensureIndexes } from './mongo-indexes';
 
 const DEFAULT_COLLECTION_NAME = 'chrono-tasks';
-const DEFAULT_COMPLETED_DOCUMENT_TTL = 60 * 60 * 24; // 1 day
 const DEFAULT_CLAIM_STALE_TIMEOUT = 10_000; // 10 seconds
 
 export type ChronoMongoDatastoreConfig = {
   completedDocumentTTL?: number;
-  collectionName?: string;
-  claimStaleTimeout?: number;
+  collectionName: string;
+  claimStaleTimeout: number;
 };
 
 export type MongoDatastoreOptions = {
@@ -36,13 +35,13 @@ export type TaskDocument<TaskKind, TaskData> = WithId<Omit<Task<TaskKind, TaskDa
 export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
   implements Datastore<TaskMapping, MongoDatastoreOptions>
 {
-  private config: Required<ChronoMongoDatastoreConfig>;
+  private config: ChronoMongoDatastoreConfig;
   private database: Db;
 
-  private constructor(database: Db, config?: ChronoMongoDatastoreConfig) {
+  private constructor(database: Db, config?: Partial<ChronoMongoDatastoreConfig>) {
     this.database = database;
     this.config = {
-      completedDocumentTTL: config?.completedDocumentTTL || DEFAULT_COMPLETED_DOCUMENT_TTL,
+      completedDocumentTTL: config?.completedDocumentTTL,
       claimStaleTimeout: config?.claimStaleTimeout || DEFAULT_CLAIM_STALE_TIMEOUT,
       collectionName: config?.collectionName || DEFAULT_COLLECTION_NAME,
     };
@@ -50,7 +49,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
 
   static async create<TaskMapping extends TaskMappingBase>(
     database: Db,
-    config?: ChronoMongoDatastoreConfig,
+    config?: Partial<ChronoMongoDatastoreConfig>,
   ): Promise<ChronoMongoDatastore<TaskMapping>> {
     const datastore = new ChronoMongoDatastore<TaskMapping>(database, config);
 
