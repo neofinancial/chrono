@@ -26,14 +26,14 @@ describe('ChronoMongoDatastore', () => {
 
     collection = mongoClient.db(DB_NAME).collection(TEST_DB_COLLECTION_NAME);
 
-    dataStore = new ChronoMongoDatastore(mongoClient.db(DB_NAME), {
+    dataStore = await ChronoMongoDatastore.create(mongoClient.db(DB_NAME), {
       collectionName: TEST_DB_COLLECTION_NAME,
       claimStaleTimeout: TEST_CLAIM_STALE_TIMEOUT,
     });
   });
 
   beforeEach(async () => {
-    await collection.drop();
+    await collection.deleteMany();
   });
 
   afterAll(async () => {
@@ -93,7 +93,7 @@ describe('ChronoMongoDatastore', () => {
       kind: 'test' as const,
       data: { test: 'test' },
       priority: 1,
-      when: new Date(),
+      when: new Date(Date.now() - 1),
     };
 
     test('should claim task in PENDING state with scheduledAt in the past', async () => {
@@ -192,11 +192,11 @@ describe('ChronoMongoDatastore', () => {
       });
 
       const completedTask = await dataStore.complete(task.id);
-      const taskDocument = collection.findOne({
+      const taskDocument = await collection.findOne({
         _id: new ObjectId(task.id),
       });
 
-      expect(taskDocument).resolves.toEqual(
+      expect(taskDocument).toEqual(
         expect.objectContaining({
           kind: task.kind,
           status: TaskStatus.COMPLETED,
@@ -230,11 +230,11 @@ describe('ChronoMongoDatastore', () => {
       });
 
       const failedTask = await dataStore.fail(task.id);
-      const taskDocument = collection.findOne({
+      const taskDocument = await collection.findOne({
         _id: new ObjectId(task.id),
       });
 
-      expect(taskDocument).resolves.toEqual(
+      expect(taskDocument).toEqual(
         expect.objectContaining({
           kind: task.kind,
           status: TaskStatus.FAILED,
