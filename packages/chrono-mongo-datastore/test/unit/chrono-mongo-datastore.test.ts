@@ -61,7 +61,7 @@ describe('ChronoMongoDatastore', () => {
             originalScheduleDate: expect.any(Date),
             scheduledAt: expect.any(Date),
             id: expect.any(String),
-            retryCount: 0,
+            claimCount: 0,
           }),
         );
       });
@@ -81,7 +81,7 @@ describe('ChronoMongoDatastore', () => {
             priority: input.priority,
             originalScheduleDate: expect.any(Date),
             scheduledAt: expect.any(Date),
-            retryCount: 0,
+            claimCount: 0,
           }),
         );
       });
@@ -292,7 +292,7 @@ describe('ChronoMongoDatastore', () => {
       expect(task).toEqual(
         expect.objectContaining({
           status: TaskStatus.PENDING,
-          retryCount: 0,
+          claimCount: 0,
           scheduledAt: firstScheduleDate,
           originalScheduleDate: firstScheduleDate,
         }),
@@ -309,7 +309,6 @@ describe('ChronoMongoDatastore', () => {
           status: TaskStatus.PENDING,
           scheduledAt: secondScheduleDate,
           originalScheduleDate: firstScheduleDate,
-          retryCount: 1,
         }),
       );
       expect(unclaimedTask).toEqual(
@@ -319,7 +318,6 @@ describe('ChronoMongoDatastore', () => {
           status: TaskStatus.PENDING,
           scheduledAt: secondScheduleDate,
           originalScheduleDate: firstScheduleDate,
-          retryCount: 1,
         }),
       );
     });
