@@ -35,7 +35,7 @@ export class SimpleProcessor<
   readonly claimIntervalMs = 150;
   readonly idleIntervalMs = 5_000;
   readonly taskHandlerTimeoutMs = 60_000;
-  readonly taskHandlerMaxRetries = 10;
+  readonly taskHandlerMaxClaimAttempts = 10;
   readonly taskHandlerRetryIntervalMs = 5_000;
 
   constructor(config: SimpleProcessorConfig<TaskKind, TaskMapping, DatastoreOptions>) {
@@ -149,7 +149,7 @@ export class SimpleProcessor<
   }
 
   private async handleTaskError(task: Task<TaskKind, TaskMapping[TaskKind]>, error: Error): Promise<void> {
-    if (task.retryCount >= this.taskHandlerMaxRetries) {
+    if (task.claimCount >= this.taskHandlerMaxClaimAttempts) {
       // Mark the task as failed
       await this.datastore.fail(task.id);
       this.emit('task.failed', {
@@ -163,8 +163,8 @@ export class SimpleProcessor<
 
     // If the task has not reached the max retries, unclaim it
     const nextScheduledAt = new Date(Date.now() + this.taskHandlerRetryIntervalMs);
-    await this.datastore.unclaim(task.id, nextScheduledAt);
-    this.emit('task.unclaimed', {
+    await this.datastore.reschedule(task.id, nextScheduledAt);
+    this.emit('task.reschedule', {
       task,
       error,
       timestamp: new Date(),
