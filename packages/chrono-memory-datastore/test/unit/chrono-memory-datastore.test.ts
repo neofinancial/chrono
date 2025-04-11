@@ -43,7 +43,7 @@ describe('ChronoMemoryDatastore', () => {
         claimedAt: undefined,
         lastExecutedAt: undefined,
         completedAt: undefined,
-        retryCount: 0,
+        claimCount: 0,
       });
     });
 
@@ -74,7 +74,7 @@ describe('ChronoMemoryDatastore', () => {
         scheduledAt: when,
         lastExecutedAt: undefined,
         completedAt: undefined,
-        retryCount: 0,
+        claimCount: 0,
       });
     });
 

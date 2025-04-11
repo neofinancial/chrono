@@ -127,6 +127,7 @@ describe('ChronoMongoDatastore', () => {
           id: task.id,
           kind: task.kind,
           status: 'CLAIMED',
+          claimCount: task.claimCount + 1,
         }),
       );
     });
@@ -160,6 +161,7 @@ describe('ChronoMongoDatastore', () => {
           id: scheduledTask.id,
           kind: scheduledTask.kind,
           status: TaskStatus.CLAIMED,
+          claimCount: scheduledTask.claimCount + 1,
         }),
       );
       expect(claimedTaskAgain).toBeUndefined();
@@ -168,6 +170,7 @@ describe('ChronoMongoDatastore', () => {
           id: scheduledTask.id,
           kind: scheduledTask.kind,
           status: TaskStatus.CLAIMED,
+          claimCount: claimedTask ? claimedTask.claimCount + 1 : undefined,
         }),
       );
     });
@@ -274,8 +277,8 @@ describe('ChronoMongoDatastore', () => {
     });
   });
 
-  describe('unclaim', () => {
-    test('should unclaim task', async () => {
+  describe('reschedule', () => {
+    test('should reschedule task', async () => {
       const firstScheduleDate = faker.date.past();
       const secondScheduleDate = faker.date.past();
 
@@ -295,7 +298,7 @@ describe('ChronoMongoDatastore', () => {
         }),
       );
 
-      const unclaimedTask = await dataStore.unclaim(task.id, secondScheduleDate);
+      const unclaimedTask = await dataStore.reschedule(task.id, secondScheduleDate);
       const taskDocument = await collection.findOne({
         _id: new ObjectId(task.id),
       });
