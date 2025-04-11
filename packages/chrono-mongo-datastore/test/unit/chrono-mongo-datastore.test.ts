@@ -198,6 +198,73 @@ describe('ChronoMongoDatastore', () => {
         expect.objectContaining({ id: task2.id, status: TaskStatus.CLAIMED }),
       );
     });
+
+    describe('fifo grouping', () => {
+      const input = {
+        kind: 'test' as const,
+        data: { test: 'test' },
+        priority: 1,
+        groupId: 'group1',
+      };
+
+      test('should claim tasks in FIFO order based on groupId', async () => {
+        const task1 = await dataStore.schedule({ ...input, when: new Date(Date.now() - 100) });
+        const task2 = await dataStore.schedule({ ...input, when: new Date(Date.now() - 50) });
+        const task3 = await dataStore.schedule({ ...input, when: new Date(Date.now() - 1) });
+
+        const possibleClaimedTasks = await Promise.all([
+          dataStore.claim({ kind: input.kind }),
+          dataStore.claim({ kind: input.kind }),
+          dataStore.claim({ kind: input.kind }),
+        ]);
+
+        expect(possibleClaimedTasks.length).toEqual(3);
+
+        const claimedTasks = possibleClaimedTasks.filter(Boolean);
+        expect(claimedTasks).toHaveLength(1);
+        expect(claimedTasks[0]).toEqual(
+          expect.objectContaining({
+            id: task1.id,
+            kind: task1.kind,
+            status: TaskStatus.CLAIMED,
+          }),
+        );
+
+        await dataStore.complete(task1.id);
+
+        const possibleClaimedTasks2 = await Promise.all([
+          dataStore.claim({ kind: input.kind }),
+          dataStore.claim({ kind: input.kind }),
+          dataStore.claim({ kind: input.kind }),
+        ]);
+        expect(possibleClaimedTasks2.length).toEqual(3);
+        const claimedTasks2 = possibleClaimedTasks2.filter(Boolean);
+        expect(claimedTasks2).toHaveLength(1);
+        expect(claimedTasks2[0]).toEqual(
+          expect.objectContaining({
+            id: task2.id,
+            kind: task2.kind,
+            status: TaskStatus.CLAIMED,
+          }),
+        );
+        await dataStore.complete(task2.id);
+        const possibleClaimedTasks3 = await Promise.all([
+          dataStore.claim({ kind: input.kind }),
+          dataStore.claim({ kind: input.kind }),
+          dataStore.claim({ kind: input.kind }),
+        ]);
+        expect(possibleClaimedTasks3.length).toEqual(3);
+        const claimedTasks3 = possibleClaimedTasks3.filter(Boolean);
+        expect(claimedTasks3).toHaveLength(1);
+        expect(claimedTasks3[0]).toEqual(
+          expect.objectContaining({
+            id: task3.id,
+            kind: task3.kind,
+            status: TaskStatus.CLAIMED,
+          }),
+        );
+      });
+    });
   });
 
   describe('complete', () => {

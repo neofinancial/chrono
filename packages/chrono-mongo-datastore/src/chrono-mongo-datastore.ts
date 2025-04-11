@@ -118,24 +118,100 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     input: ClaimTaskInput<TaskKind>,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined> {
     const now = new Date();
+    const claimedAtStaleTimeout = new Date(now.getTime() - this.config.claimStaleTimeout);
+
+    const possibleTasks = await this.collection<TaskKind>()
+      .aggregate([
+        // 1. Initial Match: Find potential candidates
+        {
+          $match: {
+            kind: input.kind,
+            scheduledAt: { $lte: now },
+            $or: [
+              { status: TaskStatus.PENDING },
+              {
+                status: TaskStatus.CLAIMED,
+                claimedAt: {
+                  $lte: claimedAtStaleTimeout,
+                },
+              },
+            ],
+          },
+        },
+        // 2. Lookup Blocking Tasks: Check for earlier, active tasks in the same group
+        {
+          $lookup: {
+            from: this.config.collectionName,
+            let: {
+              current_groupId: '$groupId',
+              current_originalScheduledAt: '$originalScheduleDate',
+              current_id: '$_id',
+            },
+            pipeline: [
+              {
+                $match: {
+                  // Match documents that could potentially block the current one
+                  groupId: { $ne: null }, // Only apply FIFO to tasks with a groupId
+                  $expr: {
+                    $and: [
+                      { $ne: ['$_id', '$$current_id'] }, // Not the same task
+                      { $eq: ['$groupId', '$$current_groupId'] }, // Same group
+                      { $lt: ['$originalScheduleDate', '$$current_originalScheduledAt'] }, // originalScheduled *before* the current task
+                      { $in: ['$status', [TaskStatus.PENDING, TaskStatus.CLAIMED, TaskStatus.FAILED]] }, // Is in a blocking state (PENDING or CLAIMED or FAILED)
+                    ],
+                  },
+                },
+              },
+              // Optimization: We only need to know if *any* blocker exists
+              { $project: { _id: 1 } },
+              { $limit: 1 },
+            ],
+            as: 'blockingTasks',
+          },
+        },
+        // 3. Filter Based on Lookup: Only keep tasks with NO blocking tasks
+        {
+          $match: {
+            // Keep documents where the blockingTasks array is empty
+            blockingTasks: { $size: 0 },
+          },
+        },
+        // 4. Sort: Prioritize the earliest scheduled task, then by priority
+        {
+          $sort: {
+            priority: -1, // Then by priority (high to low)
+            scheduledAt: 1, // Enforce overall earliest schedule first
+            _id: 1, // Deterministic tie-breaker
+          },
+        },
+        // 5. Limit: Get only the single best candidate
+        {
+          $limit: 1,
+        },
+      ])
+      .toArray();
+
+    const possibleTask = possibleTasks.shift();
+
+    if (!possibleTask) {
+      return undefined;
+    }
+
     const task = await this.collection<TaskKind>().findOneAndUpdate(
       {
-        kind: input.kind,
-        scheduledAt: { $lte: now },
+        _id: possibleTask._id,
         $or: [
           { status: TaskStatus.PENDING },
           {
             status: TaskStatus.CLAIMED,
             claimedAt: {
-              $lte: new Date(now.getTime() - this.config.claimStaleTimeout),
+              $lte: claimedAtStaleTimeout,
             },
           },
         ],
       },
       { $set: { status: TaskStatus.CLAIMED, claimedAt: now } },
       {
-        sort: { priority: -1, scheduledAt: 1 },
-        // hint: IndexNames.CLAIM_DOCUMENT_INDEX as unknown as Document,
         returnDocument: 'after',
       },
     );

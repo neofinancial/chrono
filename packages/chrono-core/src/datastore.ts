@@ -19,6 +19,10 @@ export type Task<TaskKind, TaskData> = {
   data: TaskData;
   /** The priority level of the task (lower numbers can indicate higher priority) */
   priority?: number;
+  /** Identifier used to group tasks together so that they are processed sequentially. FIFO
+   * Should be used sparingly and only when necessary, as it can lead to performance issues.
+   */
+  groupId?: string;
   /** A key used for idempotency to prevent duplicate processing */
   idempotencyKey?: string;
   /** The original scheduled date when the task was first intended to run */
