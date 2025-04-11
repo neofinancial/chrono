@@ -156,7 +156,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
                     $and: [
                       { $ne: ['$_id', '$$current_id'] }, // Not the same task
                       { $eq: ['$groupId', '$$current_groupId'] }, // Same group
-                      { $lt: ['$originalScheduleDate', '$$current_originalScheduledAt'] }, // originalScheduled *before* the current task
+                      { $lt: ['$originalScheduleDate', '$$current_originalScheduledAt'] }, // originalScheduled *before* the current task. TODO: what if originalScheduledAt are the same?
                       { $in: ['$status', [TaskStatus.PENDING, TaskStatus.CLAIMED, TaskStatus.FAILED]] }, // Is in a blocking state (PENDING or CLAIMED or FAILED)
                     ],
                   },
@@ -176,7 +176,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
             blockingTasks: { $size: 0 },
           },
         },
-        // 4. Sort: Prioritize the earliest scheduled task, then by priority
+        // 4. Sort: Prioritize by priority then scheduledAt
         {
           $sort: {
             priority: -1, // Then by priority (high to low)
@@ -184,7 +184,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
             _id: 1, // Deterministic tie-breaker
           },
         },
-        // 5. Limit: Get only the single best candidate
+        // 5. Limit: Get only the single best candidate. Possible we might want more then one incase task is claimed by another process between aggregate and findOneAndUpdate
         {
           $limit: 1,
         },
