@@ -1,5 +1,6 @@
 import type { Datastore, Task } from 'datastore';
 import type { TaskMappingBase } from '..';
+import { type BackoffStrategyOptions, backoffStrategyFactory } from '../backoff-strategy';
 import type { Processor } from './processor';
 import { SimpleProcessor } from './simple-processor';
 
@@ -16,6 +17,7 @@ export type CreateProcessorInput<
   datastore: Datastore<TaskMapping, DatastoreOptions>;
   handler: (task: Task<TaskKind, TaskMapping[TaskKind]>) => Promise<void>;
   configuration: ProcessorConfiguration;
+  backoffStrategyOptions?: BackoffStrategyOptions;
 };
 
 export function createProcessor<
@@ -23,11 +25,13 @@ export function createProcessor<
   TaskMapping extends TaskMappingBase,
   DatastoreOptions,
 >(input: CreateProcessorInput<TaskKind, TaskMapping, DatastoreOptions>): Processor {
+  const backoffStrategy = backoffStrategyFactory(input.backoffStrategyOptions);
   // add more processors here
   return new SimpleProcessor<TaskKind, TaskMapping, DatastoreOptions>({
     datastore: input.datastore,
     kind: input.kind,
     handler: input.handler,
     maxConcurrency: input.configuration.maxConcurrency,
+    backoffStrategy,
   });
 }

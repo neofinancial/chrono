@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:stream';
 
+import type { BackoffStrategyOptions } from './backoff-strategy';
 import type { Datastore, ScheduleInput, Task } from './datastore';
 import { type Processor, createProcessor } from './processors';
 import { promiseWithTimeout } from './utils/promise-utils';
@@ -15,6 +16,7 @@ export type ScheduleTaskInput<TaskKind, TaskData, DatastoreOptions> = ScheduleIn
 export type RegisterTaskHandlerInput<TaskKind, TaskData> = {
   kind: TaskKind;
   handler: (task: Task<TaskKind, TaskData>) => Promise<void>;
+  backoffStrategyOptions?: BackoffStrategyOptions;
 };
 
 /**

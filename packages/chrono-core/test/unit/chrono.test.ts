@@ -51,6 +51,7 @@ describe('Chrono', () => {
       idempotencyKey: faker.string.nanoid(),
       originalScheduleDate: faker.date.future(),
       scheduledAt: faker.date.future(),
+      retryCount: 0,
     };
 
     test('schedule a task successfully', async () => {
