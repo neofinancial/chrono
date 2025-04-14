@@ -18,12 +18,23 @@ async function main() {
     handler: async (task) => {
       console.log('async-messaging task handler:', task);
     },
+    backoffStrategyOptions: {
+      type: 'linear',
+      incrementMs: 100,
+      baseDelayMs: 100,
+    },
   });
 
   const processor2 = chrono.registerTaskHandler({
     kind: 'send-email',
     handler: async (task) => {
       console.log('send-email task handler:', task);
+    },
+    backoffStrategyOptions: {
+      type: 'exponential',
+      maxDelayMs: 10_000,
+      baseDelayMs: 100,
+      jitter: 'full',
     },
   });
 
