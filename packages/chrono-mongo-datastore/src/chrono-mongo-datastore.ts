@@ -82,7 +82,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
         });
 
       if (existingTask) {
-        throw new Error();
+        throw new Error(`Task ${taskId} has a ${existingTask.status} status and can not be deleted.`);
       }
     }
 
