@@ -55,6 +55,32 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
   }
 
   /**
+   * Deletes a pending task from the datastore and returns it.
+   *
+   * @param taskId The id of the task to delete.
+   * @returns The deleted task.
+   */
+  async delete<TaskKind extends keyof TaskMapping>(
+    taskId: string,
+  ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined> {
+    const taskToRemove = Array.from(this.store.values()).find(
+      (t): t is Task<TaskKind, TaskMapping[TaskKind]> => t.id === taskId,
+    );
+
+    if (!taskToRemove) {
+      return;
+    }
+
+    if (taskToRemove && taskToRemove.status === TaskStatus.PENDING) {
+      this.store.delete(taskId);
+
+      return taskToRemove;
+    }
+
+    throw new Error(`Task ${taskId} has a ${taskToRemove.status} status and can not be deleted.`);
+  }
+
+  /**
    * Claims a task and returns it.
    *
    * @param input The input to claim the task.

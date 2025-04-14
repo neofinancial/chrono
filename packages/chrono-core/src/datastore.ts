@@ -52,6 +52,9 @@ export interface Datastore<TaskMapping extends TaskMappingBase, DatastoreOptions
   schedule<TaskKind extends keyof TaskMapping>(
     input: ScheduleInput<TaskKind, TaskMapping[TaskKind], DatastoreOptions>,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
+  delete<TaskKind extends keyof TaskMapping>(
+    taskId: string,
+  ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined>;
   claim<TaskKind extends Extract<keyof TaskMapping, string>>(
     input: ClaimTaskInput<TaskKind>,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined>;
