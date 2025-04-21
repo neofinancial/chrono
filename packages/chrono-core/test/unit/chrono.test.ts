@@ -156,7 +156,7 @@ describe('Chrono', () => {
       });
     });
 
-    test('emits a task.deleted event on failure', async () => {
+    test('emits a task.delete.failed event on failure', async () => {
       const mockDatastoreError = new Error('Failed to delete task');
       const emitSpy = vitest.spyOn(chrono, 'emit');
 
