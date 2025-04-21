@@ -333,10 +333,6 @@ describe('ChronoMongoDatastore', () => {
         when,
       });
 
-      const taskInDB1 = await collection.findOne({
-        _id: new ObjectId(task.id),
-      });
-
       await dataStore.delete(task.id);
 
       const taskInDB = await collection.findOne({
