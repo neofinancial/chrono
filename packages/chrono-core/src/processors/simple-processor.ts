@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:stream';
 import { setTimeout } from 'node:timers/promises';
 
+import type { BackoffStrategy } from '../backoff-strategy';
 import type { TaskMappingBase } from '../chrono';
 import type { Datastore, Task } from '../datastore';
 import { promiseWithTimeout } from '../utils/promise-utils';
@@ -15,6 +16,7 @@ type SimpleProcessorConfig<
   kind: TaskKind;
   handler: (task: Task<TaskKind, TaskMapping[TaskKind]>) => Promise<void>;
   maxConcurrency: number;
+  backoffStrategy: BackoffStrategy;
 };
 
 export class SimpleProcessor<
@@ -31,12 +33,12 @@ export class SimpleProcessor<
   private exitChannels: EventEmitter[] = [];
   private stopRequested = false;
   private maxConcurrency: number;
+  private backOffStrategy: BackoffStrategy;
 
   readonly claimIntervalMs = 150;
   readonly idleIntervalMs = 5_000;
   readonly taskHandlerTimeoutMs = 60_000;
   readonly taskHandlerMaxRetries = 10;
-  readonly taskHandlerRetryIntervalMs = 5_000;
 
   constructor(config: SimpleProcessorConfig<TaskKind, TaskMapping, DatastoreOptions>) {
     super();
@@ -45,6 +47,7 @@ export class SimpleProcessor<
     this.handler = config.handler;
     this.maxConcurrency = config.maxConcurrency;
     this.taskKind = config.kind;
+    this.backOffStrategy = config.backoffStrategy;
   }
 
   /**
@@ -161,8 +164,9 @@ export class SimpleProcessor<
       return;
     }
 
-    // If the task has not reached the max retries, unclaim it
-    const nextScheduledAt = new Date(Date.now() + this.taskHandlerRetryIntervalMs);
+    const delay = this.backOffStrategy({ retryAttempt: task.retryCount });
+    const nextScheduledAt = new Date(Date.now() + delay);
+
     await this.datastore.unclaim(task.id, nextScheduledAt);
     this.emit('task.unclaimed', {
       task,

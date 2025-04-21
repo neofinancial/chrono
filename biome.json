@@ -25,6 +25,11 @@
       "recommended": true
     }
   },
+  "json": {
+    "formatter": {
+      "enabled": true
+    }
+  },
   "javascript": {
     "formatter": {
       "enabled": true,

@@ -6,16 +6,24 @@ import {
   TaskStatus,
 } from '@neofinancial/chrono-core';
 import type { ClaimTaskInput } from '@neofinancial/chrono-core/build/datastore';
-import { type ClientSession, type Db, ObjectId, type OptionalId, type WithId } from 'mongodb';
+import {
+  type ClientSession,
+  type Collection,
+  type Db,
+  ObjectId,
+  type OptionalId,
+  type UpdateFilter,
+  type WithId,
+} from 'mongodb';
+import { IndexNames, ensureIndexes } from './mongo-indexes';
 
 const DEFAULT_COLLECTION_NAME = 'chrono-tasks';
-const DEFAULT_COMPLETED_DOCUMENT_TTL = 60 * 60 * 24; // 1 day
 const DEFAULT_CLAIM_STALE_TIMEOUT = 10_000; // 10 seconds
 
 export type ChronoMongoDatastoreConfig = {
   completedDocumentTTL?: number;
-  collectionName?: string;
-  claimStaleTimeout?: number;
+  collectionName: string;
+  claimStaleTimeout: number;
 };
 
 export type MongoDatastoreOptions = {
@@ -27,16 +35,29 @@ export type TaskDocument<TaskKind, TaskData> = WithId<Omit<Task<TaskKind, TaskDa
 export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
   implements Datastore<TaskMapping, MongoDatastoreOptions>
 {
-  private config: Required<ChronoMongoDatastoreConfig>;
+  private config: ChronoMongoDatastoreConfig;
   private database: Db;
 
-  constructor(database: Db, config?: ChronoMongoDatastoreConfig) {
+  private constructor(database: Db, config?: Partial<ChronoMongoDatastoreConfig>) {
     this.database = database;
     this.config = {
-      completedDocumentTTL: config?.completedDocumentTTL || DEFAULT_COMPLETED_DOCUMENT_TTL,
+      completedDocumentTTL: config?.completedDocumentTTL,
       claimStaleTimeout: config?.claimStaleTimeout || DEFAULT_CLAIM_STALE_TIMEOUT,
       collectionName: config?.collectionName || DEFAULT_COLLECTION_NAME,
     };
+  }
+
+  static async create<TaskMapping extends TaskMappingBase>(
+    database: Db,
+    config?: Partial<ChronoMongoDatastoreConfig>,
+  ): Promise<ChronoMongoDatastore<TaskMapping>> {
+    const datastore = new ChronoMongoDatastore<TaskMapping>(database, config);
+
+    await ensureIndexes(datastore.database.collection(datastore.config.collectionName), {
+      completedDocumentTTL: datastore.config.completedDocumentTTL,
+    });
+
+    return datastore;
   }
 
   async schedule<TaskKind extends keyof TaskMapping>(
@@ -53,12 +74,41 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
       retryCount: 0,
     };
 
-    const results = await this.database.collection(this.config.collectionName).insertOne(createInput, {
-      ...(input?.datastoreOptions?.session ? { session: input.datastoreOptions.session } : undefined),
-    });
+    try {
+      const results = await this.database.collection(this.config.collectionName).insertOne(createInput, {
+        ...(input?.datastoreOptions?.session ? { session: input.datastoreOptions.session } : undefined),
+        ignoreUndefined: true,
+      });
 
-    if (results.acknowledged) {
-      return this.toObject({ _id: results.insertedId, ...createInput });
+      if (results.acknowledged) {
+        return this.toObject({ _id: results.insertedId, ...createInput });
+      }
+    } catch (error) {
+      if (
+        input.idempotencyKey &&
+        error instanceof Error &&
+        'code' in error &&
+        (error.code === 11000 || error.code === 11001)
+      ) {
+        const existingTask = await this.collection<TaskKind>().findOne(
+          {
+            idempotencyKey: input.idempotencyKey,
+          },
+          {
+            hint: IndexNames.IDEMPOTENCY_KEY_INDEX,
+            ...(input.datastoreOptions?.session ? { session: input.datastoreOptions.session } : undefined),
+          },
+        );
+
+        if (existingTask) {
+          return this.toObject(existingTask);
+        }
+
+        throw new Error(
+          `Failed to find existing task with idempotency key ${input.idempotencyKey} despite unique index error`,
+        );
+      }
+      throw error;
     }
 
     throw new Error(`Failed to insert ${String(input.kind)} document`);
@@ -93,60 +143,58 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     input: ClaimTaskInput<TaskKind>,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined> {
     const now = new Date();
-    const task = await this.database
-      .collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>>(this.config.collectionName)
-      .findOneAndUpdate(
-        {
-          kind: input.kind,
-          $or: [
-            { status: TaskStatus.PENDING, scheduledAt: { $lte: now } },
-            {
-              status: TaskStatus.CLAIMED,
-              claimedAt: {
-                $lt: new Date(now.getTime() - this.config.claimStaleTimeout),
-              },
+    const task = await this.collection<TaskKind>().findOneAndUpdate(
+      {
+        kind: input.kind,
+        scheduledAt: { $lte: now },
+        $or: [
+          { status: TaskStatus.PENDING },
+          {
+            status: TaskStatus.CLAIMED,
+            claimedAt: {
+              $lte: new Date(now.getTime() - this.config.claimStaleTimeout),
             },
-          ],
-        },
-        { $set: { status: TaskStatus.CLAIMED, claimedAt: now } },
-        {
-          sort: { priority: -1, scheduledAt: 1 },
-          returnDocument: 'after',
-        },
-      );
+          },
+        ],
+      },
+      { $set: { status: TaskStatus.CLAIMED, claimedAt: now } },
+      {
+        sort: { priority: -1, scheduledAt: 1 },
+        // hint: IndexNames.CLAIM_DOCUMENT_INDEX as unknown as Document,
+        returnDocument: 'after',
+      },
+    );
 
     return task ? this.toObject(task) : undefined;
   }
 
   async unclaim<TaskKind extends keyof TaskMapping>(
-    _taskId: string,
-    _nextScheduledAt: Date,
+    taskId: string,
+    nextScheduledAt: Date,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
-    throw new Error('Method not implemented.');
+    const taskDocument = await this.updateOrThrow<TaskKind>(taskId, {
+      $set: {
+        status: TaskStatus.PENDING,
+        scheduledAt: nextScheduledAt,
+      },
+      $inc: {
+        retryCount: 1,
+      },
+    });
+
+    return this.toObject(taskDocument);
   }
 
   async complete<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
     const now = new Date();
 
-    const task = await this.database
-      .collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>>(this.config.collectionName)
-      .findOneAndUpdate(
-        { _id: new ObjectId(taskId) },
-        {
-          $set: {
-            status: TaskStatus.COMPLETED,
-            completedAt: now,
-            lastExecutedAt: now,
-          },
-        },
-        {
-          returnDocument: 'after',
-        },
-      );
-
-    if (!task) {
-      throw new Error(`Task with ID ${taskId} not found`);
-    }
+    const task = await this.updateOrThrow<TaskKind>(taskId, {
+      $set: {
+        status: TaskStatus.COMPLETED,
+        completedAt: now,
+        lastExecutedAt: now,
+      },
+    });
 
     return this.toObject(task);
   }
@@ -154,24 +202,31 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
   async fail<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
     const now = new Date();
 
-    const task = await this.database
-      .collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>>(this.config.collectionName)
-      .findOneAndUpdate(
-        { _id: new ObjectId(taskId) },
-        {
-          $set: {
-            status: TaskStatus.FAILED,
-            lastExecutedAt: now,
-          },
-        },
-        {
-          returnDocument: 'after',
-        },
-      );
-    if (!task) {
+    const task = await this.updateOrThrow<TaskKind>(taskId, {
+      $set: {
+        status: TaskStatus.FAILED,
+        lastExecutedAt: now,
+      },
+    });
+
+    return this.toObject(task);
+  }
+
+  private async updateOrThrow<TaskKind extends keyof TaskMapping>(
+    taskId: string,
+    update: UpdateFilter<TaskDocument<TaskKind, TaskMapping[TaskKind]>>,
+  ): Promise<TaskDocument<TaskKind, TaskMapping[TaskKind]>> {
+    const document = await this.collection<TaskKind>().findOneAndUpdate({ _id: new ObjectId(taskId) }, update, {
+      returnDocument: 'after',
+    });
+    if (!document) {
       throw new Error(`Task with ID ${taskId} not found`);
     }
-    return this.toObject(task);
+    return document;
+  }
+
+  private collection<TaskKind extends keyof TaskMapping>(): Collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>> {
+    return this.database.collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>>(this.config.collectionName);
   }
 
   private toObject<TaskKind extends keyof TaskMapping>(
