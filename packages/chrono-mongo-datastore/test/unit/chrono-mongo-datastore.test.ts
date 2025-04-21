@@ -321,4 +321,59 @@ describe('ChronoMongoDatastore', () => {
       );
     });
   });
+
+  describe('delete', () => {
+    test('deletes task removing from datastore', async () => {
+      const when = new Date();
+
+      const task = await dataStore.schedule({
+        kind: 'test',
+        data: { test: 'test' },
+        priority: 1,
+        when
+      });
+
+      const taskInDB1 = await collection.findOne({
+        _id: new ObjectId(task.id),
+      });
+
+      await dataStore.delete(task.id);
+
+      const taskInDB = await collection.findOne({
+        _id: new ObjectId(task.id),
+      });
+
+      expect(taskInDB).toBeNull();
+    });
+
+    test('returns deleted task', async () => {
+      const when = new Date();
+
+      const task = await dataStore.schedule({
+        kind: 'test',
+        data: { test: 'test' },
+        priority: 1,
+        when
+      });
+
+      const deletedTask = await dataStore.delete(task.id);
+
+      expect(deletedTask).toEqual(task);
+    });
+
+    test('throws when attempting to delete a task that is not PENDING', async () => {
+      const when = new Date();
+
+      const task = await dataStore.schedule({
+        kind: 'test',
+        data: { test: 'test' },
+        priority: 1,
+        when
+      });
+
+      await dataStore.claim({ kind: task.kind });
+
+      await expect(dataStore.delete(task.id)).rejects.toThrow(`Task ${task.id} has a CLAIMED status and can not be deleted.`);
+    });
+  });
 });

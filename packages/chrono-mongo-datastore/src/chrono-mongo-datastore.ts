@@ -120,7 +120,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     const task = await this.database
       .collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>>(this.config.collectionName)
       .findOneAndDelete({
-        id: taskId,
+        _id: new ObjectId(taskId),
         status: TaskStatus.PENDING,
       });
 
@@ -128,7 +128,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
       const existingTask = await this.database
         .collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>>(this.config.collectionName)
         .findOne({
-          id: taskId,
+          _id: new ObjectId(taskId),
         });
 
       if (existingTask) {

@@ -101,4 +101,42 @@ describe('ChronoMemoryDatastore', () => {
       expect(result).toEqual(task1);
     });
   });
+
+  describe('delete', () => {
+    test('returns successfully deleted task and removes from datastore', async () => {
+      const when = new Date();
+      const idempotencyKey = 'test-idempotency-key';
+
+      const task = await memoryDatastore.schedule({
+        when,
+        kind: 'send-test-task',
+        data: { someField: 123 },
+        idempotencyKey,
+        datastoreOptions: {},
+      });
+
+      const deletedTask = await memoryDatastore.delete(task.id);
+      const doubleDeletedTask = await memoryDatastore.delete(task.id);
+
+      expect(deletedTask).toEqual(task);
+      expect(doubleDeletedTask).toBeUndefined();
+    });
+
+    test('throws when attempting to delete a task that is not PENDING', async () => {
+      const when = new Date();
+      const idempotencyKey = 'test-idempotency-key';
+
+      const task = await memoryDatastore.schedule({
+        when,
+        kind: 'send-test-task',
+        data: { someField: 123 },
+        idempotencyKey,
+        datastoreOptions: {},
+      });
+
+      await memoryDatastore.claim({ kind: task.kind });
+
+      await expect(memoryDatastore.delete(task.id)).rejects.toThrow(`Task ${task.id} has a CLAIMED status and can not be deleted.`);
+    });
+  });
 });
