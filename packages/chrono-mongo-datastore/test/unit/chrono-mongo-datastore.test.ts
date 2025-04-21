@@ -330,7 +330,7 @@ describe('ChronoMongoDatastore', () => {
         kind: 'test',
         data: { test: 'test' },
         priority: 1,
-        when
+        when,
       });
 
       const taskInDB1 = await collection.findOne({
@@ -353,7 +353,7 @@ describe('ChronoMongoDatastore', () => {
         kind: 'test',
         data: { test: 'test' },
         priority: 1,
-        when
+        when,
       });
 
       const deletedTask = await dataStore.delete(task.id);
@@ -368,12 +368,14 @@ describe('ChronoMongoDatastore', () => {
         kind: 'test',
         data: { test: 'test' },
         priority: 1,
-        when
+        when,
       });
 
       await dataStore.claim({ kind: task.kind });
 
-      await expect(dataStore.delete(task.id)).rejects.toThrow(`Task ${task.id} has a CLAIMED status and can not be deleted.`);
+      await expect(dataStore.delete(task.id)).rejects.toThrow(
+        `Task ${task.id} has a CLAIMED status and can not be deleted.`,
+      );
     });
   });
 });

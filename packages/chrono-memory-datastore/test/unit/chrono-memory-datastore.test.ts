@@ -136,7 +136,9 @@ describe('ChronoMemoryDatastore', () => {
 
       await memoryDatastore.claim({ kind: task.kind });
 
-      await expect(memoryDatastore.delete(task.id)).rejects.toThrow(`Task ${task.id} has a CLAIMED status and can not be deleted.`);
+      await expect(memoryDatastore.delete(task.id)).rejects.toThrow(
+        `Task ${task.id} has a CLAIMED status and can not be deleted.`,
+      );
     });
   });
 });
