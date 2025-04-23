@@ -101,4 +101,46 @@ describe('ChronoMemoryDatastore', () => {
       expect(result).toEqual(task1);
     });
   });
+
+  describe('delete', () => {
+    test('returns successfully deleted task and removes from datastore', async () => {
+      const when = new Date();
+      const idempotencyKey = 'test-idempotency-key';
+
+      const task = await memoryDatastore.schedule({
+        when,
+        kind: 'send-test-task',
+        data: { someField: 123 },
+        idempotencyKey,
+        datastoreOptions: {},
+      });
+
+      const deletedTask = await memoryDatastore.delete(task.id);
+
+      await expect(memoryDatastore.delete(task.id)).rejects.toThrow(
+        `Task ${task.id} can not be deleted as it may not exist or it's not in PENDING status.`,
+      );
+
+      expect(deletedTask).toEqual(task);
+    });
+
+    test('throws when attempting to delete a task that is not PENDING', async () => {
+      const when = new Date();
+      const idempotencyKey = 'test-idempotency-key';
+
+      const task = await memoryDatastore.schedule({
+        when,
+        kind: 'send-test-task',
+        data: { someField: 123 },
+        idempotencyKey,
+        datastoreOptions: {},
+      });
+
+      await memoryDatastore.claim({ kind: task.kind });
+
+      await expect(memoryDatastore.delete(task.id)).rejects.toThrow(
+        `Task ${task.id} can not be deleted as it may not exist or it's not in PENDING status.`,
+      );
+    });
+  });
 });

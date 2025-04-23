@@ -114,6 +114,23 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     throw new Error(`Failed to insert ${String(input.kind)} document`);
   }
 
+  async delete<TaskKind extends keyof TaskMapping>(
+    taskId: string,
+  ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined> {
+    const task = await this.database
+      .collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>>(this.config.collectionName)
+      .findOneAndDelete({
+        _id: new ObjectId(taskId),
+        status: TaskStatus.PENDING,
+      });
+
+    if (!task) {
+      throw new Error(`Task ${taskId} can not be deleted as it may not exist or it's not in PENDING status.`);
+    }
+
+    return this.toObject(task);
+  }
+
   async claim<TaskKind extends Extract<keyof TaskMapping, string>>(
     input: ClaimTaskInput<TaskKind>,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined> {
