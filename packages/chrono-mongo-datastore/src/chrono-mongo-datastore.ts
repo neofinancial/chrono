@@ -128,7 +128,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
       throw new Error(`Task ${taskId} can not be deleted as it may not exist or it's not in PENDING status.`);
     }
 
-    return task ? this.toObject(task) : undefined;
+    return this.toObject(task);
   }
 
   async claim<TaskKind extends Extract<keyof TaskMapping, string>>(
