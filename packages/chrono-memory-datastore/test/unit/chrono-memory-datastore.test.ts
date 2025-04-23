@@ -116,10 +116,12 @@ describe('ChronoMemoryDatastore', () => {
       });
 
       const deletedTask = await memoryDatastore.delete(task.id);
-      const doubleDeletedTask = await memoryDatastore.delete(task.id);
+
+      await expect(memoryDatastore.delete(task.id)).rejects.toThrow(
+        `Task ${task.id} can not be deleted as it may not exist or it's not in PENDING status.`,
+      );
 
       expect(deletedTask).toEqual(task);
-      expect(doubleDeletedTask).toBeUndefined();
     });
 
     test('throws when attempting to delete a task that is not PENDING', async () => {
@@ -137,7 +139,7 @@ describe('ChronoMemoryDatastore', () => {
       await memoryDatastore.claim({ kind: task.kind });
 
       await expect(memoryDatastore.delete(task.id)).rejects.toThrow(
-        `Task ${task.id} has a CLAIMED status and can not be deleted.`,
+        `Task ${task.id} can not be deleted as it may not exist or it's not in PENDING status.`,
       );
     });
   });

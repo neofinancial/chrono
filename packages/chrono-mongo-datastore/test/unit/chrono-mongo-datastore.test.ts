@@ -370,7 +370,7 @@ describe('ChronoMongoDatastore', () => {
       await dataStore.claim({ kind: task.kind });
 
       await expect(dataStore.delete(task.id)).rejects.toThrow(
-        `Task ${task.id} has a CLAIMED status and can not be deleted.`,
+        `Task ${task.id} can not be deleted as it may not exist or it's not in PENDING status.`,
       );
     });
   });

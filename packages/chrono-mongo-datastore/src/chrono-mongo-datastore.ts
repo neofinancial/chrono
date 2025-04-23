@@ -125,15 +125,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
       });
 
     if (!task) {
-      const existingTask = await this.database
-        .collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>>(this.config.collectionName)
-        .findOne({
-          _id: new ObjectId(taskId),
-        });
-
-      if (existingTask) {
-        throw new Error(`Task ${taskId} has a ${existingTask.status} status and can not be deleted.`);
-      }
+      throw new Error(`Task ${taskId} can not be deleted as it may not exist or it's not in PENDING status.`);
     }
 
     return task ? this.toObject(task) : undefined;
