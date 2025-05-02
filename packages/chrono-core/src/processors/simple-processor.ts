@@ -17,6 +17,10 @@ type SimpleProcessorConfig<
   handler: (task: Task<TaskKind, TaskMapping[TaskKind]>) => Promise<void>;
   maxConcurrency: number;
   backoffStrategy: BackoffStrategy;
+  claimIntervalMs?: number;
+  idleIntervalMs?: number;
+  taskHandlerTimeoutMs?: number;
+  taskHandlerMaxRetries?: number;
 };
 
 export class SimpleProcessor<
@@ -27,18 +31,21 @@ export class SimpleProcessor<
   extends EventEmitter
   implements Processor
 {
-  private taskKind: TaskKind;
-  private datastore: Datastore<TaskMapping, DatastoreOptions>;
-  private handler: (task: Task<TaskKind, TaskMapping[TaskKind]>) => Promise<void>;
-  private exitChannels: EventEmitter[] = [];
-  private stopRequested = false;
+  readonly taskKind: TaskKind;
+  readonly datastore: Datastore<TaskMapping, DatastoreOptions>;
+  readonly handler: (task: Task<TaskKind, TaskMapping[TaskKind]>) => Promise<void>;
+
   private maxConcurrency: number;
   private backOffStrategy: BackoffStrategy;
 
-  readonly claimIntervalMs = 150;
-  readonly idleIntervalMs = 5_000;
-  readonly taskHandlerTimeoutMs = 60_000;
-  readonly taskHandlerMaxRetries = 10;
+  readonly claimIntervalMs: number;
+  readonly idleIntervalMs: number;
+
+  readonly taskHandlerTimeoutMs: number;
+  readonly taskHandlerMaxRetries: number;
+
+  private exitChannels: EventEmitter[] = [];
+  private stopRequested = false;
 
   constructor(config: SimpleProcessorConfig<TaskKind, TaskMapping, DatastoreOptions>) {
     super();
@@ -48,6 +55,10 @@ export class SimpleProcessor<
     this.maxConcurrency = config.maxConcurrency;
     this.taskKind = config.kind;
     this.backOffStrategy = config.backoffStrategy;
+    this.claimIntervalMs = config.claimIntervalMs || 50;
+    this.idleIntervalMs = config.idleIntervalMs || 5_000;
+    this.taskHandlerTimeoutMs = config.taskHandlerTimeoutMs || 60_000;
+    this.taskHandlerMaxRetries = config.taskHandlerMaxRetries || 10;
   }
 
   /**
