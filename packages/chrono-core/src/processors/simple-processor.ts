@@ -9,7 +9,7 @@ import type { Processor } from './processor';
 
 const DEFAULT_CLAIM_INTERVAL_MS = 50;
 const DEFAULT_IDLE_INTERVAL_MS = 5_000;
-const DEFAULT_TASK_HANDLER_TIMEOUT_MS = 60_000;
+const DEFAULT_TASK_HANDLER_TIMEOUT_MS = 5_000;
 const DEFAULT_TASK_HANDLER_MAX_RETRIES = 10;
 
 type SimpleProcessorConfig<
@@ -70,14 +70,14 @@ export class SimpleProcessor<
   }
 
   /**
-   * Validates the task handler timeout against the claim interval.
+   * Validates the task handler timeout against the claim stale timeout.
    *
-   * @throws {Error} If the task handler timeout is less than or equal to the claim interval.
+   * @throws {Error} If the task handler timeout is greater than or equal to the claim stale timeout.
    */
   private validateTaskHandlerTimeout(): void {
-    if (this.datastore.getClaimStaleTimeoutMs() <= this.claimIntervalMs) {
+    if (this.taskHandlerTimeoutMs >= this.datastore.getClaimStaleTimeoutMs()) {
       throw new Error(
-        `Claim stale timeout (${this.datastore.getClaimStaleTimeoutMs()}) must be greater than claim interval (${this.claimIntervalMs}ms).`,
+        `Task handler timeout (${this.taskHandlerTimeoutMs}ms) must be less than the claim stale timeout (${this.datastore.getClaimStaleTimeoutMs()}ms).`,
       );
     }
   }
