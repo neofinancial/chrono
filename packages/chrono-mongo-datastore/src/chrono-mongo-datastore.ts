@@ -47,6 +47,10 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     };
   }
 
+  getClaimStaleTimeout(): number {
+    return this.config.claimStaleTimeout;
+  }
+
   static async create<TaskMapping extends TaskMappingBase>(
     database: Db,
     config?: Partial<ChronoMongoDatastoreConfig>,

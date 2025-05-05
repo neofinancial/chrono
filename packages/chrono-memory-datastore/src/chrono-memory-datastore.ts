@@ -7,13 +7,32 @@ import {
   TaskStatus,
 } from '@neofinancial/chrono-core';
 
+const DEFAULT_CLAIM_STALE_TIMEOUT = 10_000; // 10 seconds
+
+type ChronoMemoryDatastoreConfig = {
+  claimStaleTimeout: number;
+};
+
 export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDatastoreOptions>
   implements Datastore<TaskMapping, MemoryDatastoreOptions>
 {
   private store: Map<string, Task<keyof TaskMapping, TaskMapping[keyof TaskMapping]>>;
+  private config: ChronoMemoryDatastoreConfig;
 
-  constructor() {
+  constructor(config?: Partial<ChronoMemoryDatastoreConfig>) {
     this.store = new Map();
+    this.config = {
+      claimStaleTimeout: config?.claimStaleTimeout || DEFAULT_CLAIM_STALE_TIMEOUT,
+    };
+  }
+
+  /**
+   * Returns the timeout for claimed tasks.
+   *
+   * @returns The timeout in milliseconds.
+   */
+  getClaimStaleTimeout(): number {
+    return this.config.claimStaleTimeout;
   }
 
   /**
@@ -85,15 +104,28 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
   async claim<TaskKind extends keyof TaskMapping>(
     input: ClaimTaskInput<TaskKind>,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined> {
-    const claimedTask = Array.from(this.store.values()).find(
-      (t): t is Task<TaskKind, TaskMapping[TaskKind]> => t.kind === input.kind && t.status === TaskStatus.PENDING,
-    );
+    const now = new Date();
+
+    const claimedTask = Array.from(this.store.values()).find((t) => {
+      if (t.kind === input.kind && t.status === TaskStatus.PENDING) {
+        return t;
+      }
+
+      if (
+        t.kind === input.kind &&
+        t.status === TaskStatus.CLAIMED &&
+        t.claimedAt &&
+        t.claimedAt <= new Date(now.getTime() - this.config.claimStaleTimeout)
+      ) {
+        return t;
+      }
+    });
 
     if (claimedTask) {
       claimedTask.status = TaskStatus.CLAIMED;
-      claimedTask.claimedAt = new Date();
+      claimedTask.claimedAt = now;
 
-      return claimedTask;
+      return claimedTask as Task<TaskKind, TaskMapping[TaskKind]>;
     }
   }
 

@@ -7,6 +7,11 @@ import type { Datastore, Task } from '../datastore';
 import { promiseWithTimeout } from '../utils/promise-utils';
 import type { Processor } from './processor';
 
+const DEFAULT_CLAIM_INTERVAL_MS = 50;
+const DEFAULT_IDLE_INTERVAL_MS = 5_000;
+const DEFAULT_TASK_HANDLER_TIMEOUT_MS = 60_000;
+const DEFAULT_TASK_HANDLER_MAX_RETRIES = 10;
+
 type SimpleProcessorConfig<
   TaskKind extends keyof TaskMapping,
   TaskMapping extends TaskMappingBase,
@@ -55,10 +60,11 @@ export class SimpleProcessor<
     this.maxConcurrency = config.maxConcurrency;
     this.taskKind = config.kind;
     this.backOffStrategy = config.backoffStrategy;
-    this.claimIntervalMs = config.claimIntervalMs || 50;
-    this.idleIntervalMs = config.idleIntervalMs || 5_000;
-    this.taskHandlerTimeoutMs = config.taskHandlerTimeoutMs || 60_000;
-    this.taskHandlerMaxRetries = config.taskHandlerMaxRetries || 10;
+
+    this.claimIntervalMs = config.claimIntervalMs || DEFAULT_CLAIM_INTERVAL_MS;
+    this.idleIntervalMs = config.idleIntervalMs || DEFAULT_IDLE_INTERVAL_MS;
+    this.taskHandlerTimeoutMs = config.taskHandlerTimeoutMs || DEFAULT_TASK_HANDLER_TIMEOUT_MS;
+    this.taskHandlerMaxRetries = config.taskHandlerMaxRetries || DEFAULT_TASK_HANDLER_MAX_RETRIES;
   }
 
   /**

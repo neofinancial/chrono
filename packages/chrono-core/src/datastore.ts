@@ -64,4 +64,5 @@ export interface Datastore<TaskMapping extends TaskMappingBase, DatastoreOptions
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
   complete<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
   fail<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
+  getClaimStaleTimeout(): number;
 }
