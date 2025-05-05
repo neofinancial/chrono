@@ -22,17 +22,10 @@ pnpm test
 
 ### Chrono instance events
 
-**Lifecycle related events**
 - `ready` - Emits this event when all processors are started as a result of calling `chrono.start()` method.
 - `stopped` - Emits this event when all processors are successfully stopped as a result of calling `chrono.stop()` method.
 - `stop.failed` - Emits this event if any processor fails to stop within the exit timeout as a result of calling `chrono.stop()` method.
 - `close` - Emits this event after stopping all processors regardless successful or not as a result of calling `chrono.stop()` method.
-
-**Task related events**
-- `task.scheduled` - Emits this event when the task is successfully scheduled as a result of calling `chrono.scheduleTask()` method.
-- `task.schedule.failed` - Emits this event when chrono fails to schedule a task as a result of calling `chrono.scheduleTask()` method.
-- `task.deleted` - Emits this event when the task is successfully deleted as a result of calling `chrono.deleteTask()` method.
-- `task.delete.failed` - Emits this event when chrono fails to schedule a task as a result of calling `chrono.deleteTask()` method.
 
 ### Processor instance events
 

@@ -68,46 +68,22 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> exten
   public async scheduleTask<TaskKind extends keyof TaskMapping>(
     input: ScheduleTaskInput<TaskKind, TaskMapping[TaskKind], DatastoreOptions>,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
-    try {
-      const task = await this.datastore.schedule({
-        when: input.when,
-        kind: input.kind,
-        data: input.data,
-        datastoreOptions: input.datastoreOptions,
-      });
+    const task = await this.datastore.schedule({
+      when: input.when,
+      kind: input.kind,
+      data: input.data,
+      datastoreOptions: input.datastoreOptions,
+    });
 
-      this.emit('task.scheduled', { task, timestamp: new Date() });
-
-      return task;
-    } catch (error) {
-      this.emit('task.schedule.failed', {
-        error,
-        input,
-        timestamp: new Date(),
-      });
-
-      throw error;
-    }
+    return task;
   }
 
   public async deleteTask<TaskKind extends keyof TaskMapping>(
     taskId: string,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined> {
-    try {
-      const task = await this.datastore.delete<TaskKind>(taskId);
+    const task = await this.datastore.delete<TaskKind>(taskId);
 
-      this.emit('task.deleted', { task, timestamp: new Date() });
-
-      return task;
-    } catch (error) {
-      this.emit('task.delete.failed', {
-        error,
-        taskId,
-        timestamp: new Date(),
-      });
-
-      throw error;
-    }
+    return task;
   }
 
   public registerTaskHandler<TaskKind extends Extract<keyof TaskMapping, string>>(
