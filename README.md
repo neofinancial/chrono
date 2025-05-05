@@ -24,7 +24,7 @@ pnpm test
 
 **Lifecycle related events**
 - `ready` - Emits this event when all processors are started as a result of calling `chrono.start()` method.
-- `stop` - Emits this event when all processors are successfully stopped as a result of calling `chrono.stop()` method.
+- `stopped` - Emits this event when all processors are successfully stopped as a result of calling `chrono.stop()` method.
 - `stop.failed` - Emits this event if any processor fails to stop within the exit timeout as a result of calling `chrono.stop()` method.
 - `close` - Emits this event after stopping all processors regardless successful or not as a result of calling `chrono.stop()` method.
 

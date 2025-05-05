@@ -57,7 +57,7 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> exten
     try {
       await promiseWithTimeout(Promise.all(stopPromises), this.exitTimeoutMs);
 
-      this.emit('stop', { timestamp: new Date() });
+      this.emit('stopped', { timestamp: new Date() });
     } catch (error) {
       this.emit('stop.failed', { error, timestamp: new Date() });
     } finally {
