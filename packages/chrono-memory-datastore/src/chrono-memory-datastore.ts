@@ -31,7 +31,7 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
    *
    * @returns The timeout in milliseconds.
    */
-  getClaimStaleTimeout(): number {
+  getClaimStaleTimeoutMs(): number {
     return this.config.claimStaleTimeout;
   }
 

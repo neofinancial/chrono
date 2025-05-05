@@ -47,7 +47,12 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     };
   }
 
-  getClaimStaleTimeout(): number {
+  /**
+   * Returns the timeout for claimed tasks.
+   *
+   * @returns The timeout in milliseconds.
+   */
+  getClaimStaleTimeoutMs(): number {
     return this.config.claimStaleTimeout;
   }
 
