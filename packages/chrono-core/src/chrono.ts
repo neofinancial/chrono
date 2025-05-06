@@ -17,6 +17,10 @@ export type RegisterTaskHandlerInput<TaskKind, TaskData> = {
   kind: TaskKind;
   handler: (task: Task<TaskKind, TaskData>) => Promise<void>;
   backoffStrategyOptions?: BackoffStrategyOptions;
+  claimIntervalMs?: number;
+  idleIntervalMs?: number;
+  taskHandlerTimeoutMs?: number;
+  taskHandlerMaxRetries?: number;
 };
 
 /**
@@ -119,8 +123,20 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> exten
       kind: input.kind,
       datastore: this.datastore,
       handler: input.handler,
-      configuration: { maxConcurrency: 1 },
+      configuration: {
+        maxConcurrency: 1, // TODO: make configurable
+        claimIntervalMs: input.claimIntervalMs,
+        idleIntervalMs: input.idleIntervalMs,
+        taskHandlerTimeoutMs: input.taskHandlerTimeoutMs,
+        taskHandlerMaxRetries: input.taskHandlerMaxRetries,
+      },
     });
+
+    if (processor.getTaskHandlerTimeoutMs() >= this.datastore.getClaimStaleTimeoutMs()) {
+      throw new Error(
+        `Task handler timeout (${processor.getTaskHandlerTimeoutMs()}ms) must be less than the claim stale timeout (${this.datastore.getClaimStaleTimeoutMs()}ms)`,
+      );
+    }
 
     this.processors.set(input.kind, processor);
 

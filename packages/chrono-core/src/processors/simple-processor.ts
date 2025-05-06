@@ -65,21 +65,10 @@ export class SimpleProcessor<
     this.idleIntervalMs = config.idleIntervalMs || DEFAULT_IDLE_INTERVAL_MS;
     this.taskHandlerTimeoutMs = config.taskHandlerTimeoutMs || DEFAULT_TASK_HANDLER_TIMEOUT_MS;
     this.taskHandlerMaxRetries = config.taskHandlerMaxRetries || DEFAULT_TASK_HANDLER_MAX_RETRIES;
-
-    this.validateTaskHandlerTimeout();
   }
 
-  /**
-   * Validates the task handler timeout against the claim stale timeout.
-   *
-   * @throws {Error} If the task handler timeout is greater than or equal to the claim stale timeout.
-   */
-  private validateTaskHandlerTimeout(): void {
-    if (this.taskHandlerTimeoutMs >= this.datastore.getClaimStaleTimeoutMs()) {
-      throw new Error(
-        `Task handler timeout (${this.taskHandlerTimeoutMs}ms) must be less than the claim stale timeout (${this.datastore.getClaimStaleTimeoutMs()}ms).`,
-      );
-    }
+  getTaskHandlerTimeoutMs(): number {
+    return this.taskHandlerTimeoutMs;
   }
 
   /**
