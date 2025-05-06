@@ -7,6 +7,7 @@ import type { Datastore, Task } from '../datastore';
 import { promiseWithTimeout } from '../utils/promise-utils';
 import type { Processor } from './processor';
 
+const DEFAULT_MAX_CONCURRENCY = 1;
 const DEFAULT_CLAIM_INTERVAL_MS = 50;
 const DEFAULT_IDLE_INTERVAL_MS = 5_000;
 const DEFAULT_TASK_HANDLER_TIMEOUT_MS = 5_000;
@@ -20,7 +21,7 @@ type SimpleProcessorConfig<
   datastore: Datastore<TaskMapping, DatastoreOptions>;
   kind: TaskKind;
   handler: (task: Task<TaskKind, TaskMapping[TaskKind]>) => Promise<void>;
-  maxConcurrency: number;
+  maxConcurrency?: number;
   backoffStrategy: BackoffStrategy;
   claimIntervalMs?: number;
   idleIntervalMs?: number;
@@ -57,10 +58,10 @@ export class SimpleProcessor<
 
     this.datastore = config.datastore;
     this.handler = config.handler;
-    this.maxConcurrency = config.maxConcurrency;
     this.taskKind = config.kind;
     this.backOffStrategy = config.backoffStrategy;
 
+    this.maxConcurrency = config.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
     this.claimIntervalMs = config.claimIntervalMs || DEFAULT_CLAIM_INTERVAL_MS;
     this.idleIntervalMs = config.idleIntervalMs || DEFAULT_IDLE_INTERVAL_MS;
     this.taskHandlerTimeoutMs = config.taskHandlerTimeoutMs || DEFAULT_TASK_HANDLER_TIMEOUT_MS;

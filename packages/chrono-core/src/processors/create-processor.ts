@@ -5,7 +5,7 @@ import type { Processor } from './processor';
 import { SimpleProcessor } from './simple-processor';
 
 export type ProcessorConfiguration = {
-  maxConcurrency: number;
+  maxConcurrency?: number;
   claimIntervalMs?: number;
   idleIntervalMs?: number;
   taskHandlerTimeoutMs?: number;
