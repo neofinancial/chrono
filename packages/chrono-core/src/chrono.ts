@@ -13,10 +13,13 @@ export type ScheduleTaskInput<TaskKind, TaskData, DatastoreOptions> = ScheduleIn
   DatastoreOptions
 >;
 
+const DEFAULT_TASK_HANDLER_MAX_CONCURRENCY = 1;
+
 export type RegisterTaskHandlerInput<TaskKind, TaskData> = {
   kind: TaskKind;
   handler: (task: Task<TaskKind, TaskData>) => Promise<void>;
   backoffStrategyOptions?: BackoffStrategyOptions;
+  maxConcurrency?: number;
   claimIntervalMs?: number;
   idleIntervalMs?: number;
   taskHandlerTimeoutMs?: number;
@@ -124,7 +127,7 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> exten
       datastore: this.datastore,
       handler: input.handler,
       configuration: {
-        maxConcurrency: 1, // TODO: make configurable
+        maxConcurrency: input.maxConcurrency || DEFAULT_TASK_HANDLER_MAX_CONCURRENCY,
         claimIntervalMs: input.claimIntervalMs,
         idleIntervalMs: input.idleIntervalMs,
         taskHandlerTimeoutMs: input.taskHandlerTimeoutMs,
