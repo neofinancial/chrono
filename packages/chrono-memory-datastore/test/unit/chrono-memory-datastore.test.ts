@@ -178,13 +178,13 @@ describe('ChronoMemoryDatastore', () => {
 
       await memoryDatastore.claim({ kind: task.kind });
 
-      await memoryDatastore.delete(task.id, true);
+      await memoryDatastore.delete(task.id, { force: true });
 
       await expect(memoryDatastore.unclaim(task.id, new Date())).rejects.toThrow(`Task with id ${task.id} not found`);
     });
 
     test('noops when force deleting a task that does not exist', async () => {
-      await memoryDatastore.delete('not-an-id', true);
+      await memoryDatastore.delete('not-an-id', { force: true });
     });
   });
 });

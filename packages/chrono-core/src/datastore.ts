@@ -53,6 +53,10 @@ export type DeleteByIdempotencyKeyInput<TaskKind> = {
   idempotencyKey: string;
 };
 
+export type DeleteOptions = {
+  force?: boolean;
+};
+
 export type DeleteInput<TaskKind> = DeleteByIdempotencyKeyInput<TaskKind> | string;
 
 export interface Datastore<TaskMapping extends TaskMappingBase, DatastoreOptions> {
@@ -60,12 +64,12 @@ export interface Datastore<TaskMapping extends TaskMappingBase, DatastoreOptions
     input: ScheduleInput<TaskKind, TaskMapping[TaskKind], DatastoreOptions>,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
   delete<TaskKind extends keyof TaskMapping>(
-    key: string,
-    force?: boolean,
+    taskId: string,
+    options?: DeleteOptions,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined>;
   delete<TaskKind extends keyof TaskMapping>(
     key: DeleteByIdempotencyKeyInput<TaskKind>,
-    force?: boolean,
+    options?: DeleteOptions,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined>;
   claim<TaskKind extends Extract<keyof TaskMapping, string>>(
     input: ClaimTaskInput<TaskKind>,

@@ -406,7 +406,7 @@ describe('ChronoMongoDatastore', () => {
 
       await dataStore.claim({ kind: task.kind });
 
-      await dataStore.delete(task.id, true);
+      await dataStore.delete(task.id, { force: true });
 
       const taskInDB = await collection.findOne({
         _id: new ObjectId(task.id),
@@ -416,7 +416,7 @@ describe('ChronoMongoDatastore', () => {
     });
 
     test('noops when force deleting a task that does not exist', async () => {
-      await dataStore.delete(new ObjectId().toHexString(), true);
+      await dataStore.delete(new ObjectId().toHexString(), { force: true });
     });
   });
 });

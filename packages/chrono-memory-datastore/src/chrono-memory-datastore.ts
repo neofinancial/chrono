@@ -6,7 +6,7 @@ import {
   type TaskMappingBase,
   TaskStatus,
 } from '@neofinancial/chrono-core';
-import type { DeleteInput } from '@neofinancial/chrono-core/build/datastore';
+import type { DeleteInput, DeleteOptions } from '@neofinancial/chrono-core/build/datastore';
 
 export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDatastoreOptions>
   implements Datastore<TaskMapping, MemoryDatastoreOptions>
@@ -64,7 +64,7 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
    */
   async delete<TaskKind extends keyof TaskMapping>(
     key: DeleteInput<TaskKind>,
-    force?: boolean,
+    options?: DeleteOptions,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined> {
     const filter =
       typeof key === 'string'
@@ -77,13 +77,13 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
 
     const taskIsPending = taskToRemove?.status === TaskStatus.PENDING;
 
-    if (taskToRemove && (taskIsPending || force)) {
+    if (taskToRemove && (taskIsPending || options?.force)) {
       this.store.delete(taskToRemove.id);
 
       return taskToRemove;
     }
 
-    if (force) {
+    if (options?.force) {
       return;
     }
 

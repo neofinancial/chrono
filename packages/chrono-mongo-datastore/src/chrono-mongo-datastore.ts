@@ -5,7 +5,7 @@ import {
   type TaskMappingBase,
   TaskStatus,
 } from '@neofinancial/chrono-core';
-import type { ClaimTaskInput, DeleteInput } from '@neofinancial/chrono-core/build/datastore';
+import type { ClaimTaskInput, DeleteInput, DeleteOptions } from '@neofinancial/chrono-core/build/datastore';
 import {
   type ClientSession,
   type Collection,
@@ -116,17 +116,17 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
 
   async delete<TaskKind extends Extract<keyof TaskMapping, string>>(
     key: DeleteInput<TaskKind>,
-    force?: boolean,
+    options?: DeleteOptions,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined> {
     const filter =
       typeof key === 'string' ? { _id: new ObjectId(key) } : { kind: key.kind, idempotencyKey: key.idempotencyKey };
     const task = await this.collection<TaskKind>().findOneAndDelete({
       ...filter,
-      ...(force ? {} : { status: TaskStatus.PENDING }),
+      ...(options?.force ? {} : { status: TaskStatus.PENDING }),
     });
 
     if (!task) {
-      if (force) {
+      if (options?.force) {
         return;
       }
 
