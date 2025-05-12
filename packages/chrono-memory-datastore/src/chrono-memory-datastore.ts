@@ -56,9 +56,10 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
   }
 
   /**
-   * Deletes a pending task from the datastore and returns it.
+   * Deletes a task from the datastore and returns it.
    *
    * @param key Information required to locate the task to delete.
+   * @param force when true delete tasks of any status and noop on missing tasks.
    * @returns The deleted task.
    */
   async delete<TaskKind extends keyof TaskMapping>(
