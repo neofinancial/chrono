@@ -6,6 +6,7 @@ import {
   type TaskMappingBase,
   TaskStatus,
 } from '@neofinancial/chrono-core';
+import type { DeleteInput, DeleteOptions } from '@neofinancial/chrono-core/build/datastore';
 
 export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDatastoreOptions>
   implements Datastore<TaskMapping, MemoryDatastoreOptions>
@@ -55,25 +56,43 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
   }
 
   /**
-   * Deletes a pending task from the datastore and returns it.
+   * Deletes a task from the datastore and returns it.
    *
-   * @param taskId The id of the task to delete.
+   * @param key Information required to locate the task to delete.
+   * @param force when true delete tasks of any status and noop on missing tasks.
    * @returns The deleted task.
    */
   async delete<TaskKind extends keyof TaskMapping>(
-    taskId: string,
+    key: DeleteInput<TaskKind>,
+    options?: DeleteOptions,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined> {
-    const taskToRemove = Array.from(this.store.values()).find(
-      (t): t is Task<TaskKind, TaskMapping[TaskKind]> => t.id === taskId,
-    );
+    const filter =
+      typeof key === 'string'
+        ? (t: Task<keyof TaskMapping, TaskMapping[keyof TaskMapping]>): t is Task<TaskKind, TaskMapping[TaskKind]> =>
+            t.id === key
+        : (t: Task<keyof TaskMapping, TaskMapping[keyof TaskMapping]>): t is Task<TaskKind, TaskMapping[TaskKind]> =>
+            t.kind === key.kind && t.idempotencyKey === key.idempotencyKey;
 
-    if (taskToRemove && taskToRemove.status === TaskStatus.PENDING) {
-      this.store.delete(taskId);
+    const taskToRemove = Array.from(this.store.values()).find((t) => filter(t));
+
+    const taskIsPending = taskToRemove?.status === TaskStatus.PENDING;
+
+    if (taskToRemove && (taskIsPending || options?.force)) {
+      this.store.delete(taskToRemove.id);
 
       return taskToRemove;
     }
 
-    throw new Error(`Task ${taskId} can not be deleted as it may not exist or it's not in PENDING status.`);
+    if (options?.force) {
+      return;
+    }
+
+    const description =
+      typeof key === 'string'
+        ? `with id ${key}`
+        : `with kind ${String(key.kind)} and idempotencyKey ${key.idempotencyKey}`;
+
+    throw new Error(`Task ${description} can not be deleted as it may not exist or it's not in PENDING status.`);
   }
 
   /**
