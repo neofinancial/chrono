@@ -20,7 +20,7 @@ export type CreateProcessorInput<
   kind: TaskKind;
   datastore: Datastore<TaskMapping, DatastoreOptions>;
   handler: (task: Task<TaskKind, TaskMapping[TaskKind]>) => Promise<void>;
-  configuration: ProcessorConfiguration;
+  configuration?: ProcessorConfiguration;
   backoffStrategyOptions?: BackoffStrategyOptions;
 };
 
@@ -35,11 +35,11 @@ export function createProcessor<
     datastore: input.datastore,
     kind: input.kind,
     handler: input.handler,
-    maxConcurrency: input.configuration.maxConcurrency,
+    maxConcurrency: input.configuration?.maxConcurrency,
     backoffStrategy,
-    claimIntervalMs: input.configuration.claimIntervalMs,
-    idleIntervalMs: input.configuration.idleIntervalMs,
-    taskHandlerTimeoutMs: input.configuration.taskHandlerTimeoutMs,
-    taskHandlerMaxRetries: input.configuration.taskHandlerMaxRetries,
+    claimIntervalMs: input.configuration?.claimIntervalMs,
+    idleIntervalMs: input.configuration?.idleIntervalMs,
+    taskHandlerTimeoutMs: input.configuration?.taskHandlerTimeoutMs,
+    taskHandlerMaxRetries: input.configuration?.taskHandlerMaxRetries,
   });
 }

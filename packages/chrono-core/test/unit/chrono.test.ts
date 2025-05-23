@@ -210,7 +210,9 @@ describe('Chrono', () => {
         chronoInstance.registerTaskHandler({
           kind: 'send-test-task',
           handler: mockHandler,
-          taskHandlerTimeoutMs: mockClaimStaleTimeoutMs,
+          processorConfiguration: {
+            taskHandlerTimeoutMs: mockClaimStaleTimeoutMs,
+          },
         }),
       ).toThrow(
         `Task handler timeout (${mockClaimStaleTimeoutMs}ms) must be less than the claim stale timeout (${mockClaimStaleTimeoutMs}ms)`,
@@ -228,7 +230,9 @@ describe('Chrono', () => {
         chronoInstance.registerTaskHandler({
           kind: 'send-test-task',
           handler: mockHandler,
-          taskHandlerTimeoutMs: mockTaskHandlerTimeoutMs,
+          processorConfiguration: {
+            taskHandlerTimeoutMs: mockTaskHandlerTimeoutMs,
+          },
         }),
       ).toThrow(
         `Task handler timeout (${mockTaskHandlerTimeoutMs}ms) must be less than the claim stale timeout (${mockClaimStaleTimeoutMs}ms)`,
