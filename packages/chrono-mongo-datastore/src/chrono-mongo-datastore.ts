@@ -5,7 +5,7 @@ import {
   type TaskMappingBase,
   TaskStatus,
 } from '@neofinancial/chrono-core';
-import type { ClaimTaskInput } from '@neofinancial/chrono-core/build/datastore';
+import type { ClaimTaskInput, DeleteInput, DeleteOptions } from '@neofinancial/chrono-core/build/datastore';
 import {
   type ClientSession,
   type Collection,
@@ -123,18 +123,28 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     throw new Error(`Failed to insert ${String(input.kind)} document`);
   }
 
-  async delete<TaskKind extends keyof TaskMapping>(
-    taskId: string,
+  async delete<TaskKind extends Extract<keyof TaskMapping, string>>(
+    key: DeleteInput<TaskKind>,
+    options?: DeleteOptions,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined> {
-    const task = await this.database
-      .collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>>(this.config.collectionName)
-      .findOneAndDelete({
-        _id: new ObjectId(taskId),
-        status: TaskStatus.PENDING,
-      });
+    const filter =
+      typeof key === 'string' ? { _id: new ObjectId(key) } : { kind: key.kind, idempotencyKey: key.idempotencyKey };
+    const task = await this.collection<TaskKind>().findOneAndDelete({
+      ...filter,
+      ...(options?.force ? {} : { status: TaskStatus.PENDING }),
+    });
 
     if (!task) {
-      throw new Error(`Task ${taskId} can not be deleted as it may not exist or it's not in PENDING status.`);
+      if (options?.force) {
+        return;
+      }
+
+      const description =
+        typeof key === 'string'
+          ? `with id ${key}`
+          : `with kind ${String(key.kind)} and idempotencyKey ${key.idempotencyKey}`;
+
+      throw new Error(`Task ${description} can not be deleted as it may not exist or it's not in PENDING status.`);
     }
 
     return this.toObject(task);

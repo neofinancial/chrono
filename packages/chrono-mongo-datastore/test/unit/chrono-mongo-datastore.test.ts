@@ -323,7 +323,7 @@ describe('ChronoMongoDatastore', () => {
   });
 
   describe('delete', () => {
-    test('deletes task removing from datastore', async () => {
+    test('deletes task by id removing from datastore', async () => {
       const when = new Date();
 
       const task = await dataStore.schedule({
@@ -334,6 +334,26 @@ describe('ChronoMongoDatastore', () => {
       });
 
       await dataStore.delete(task.id);
+
+      const taskInDB = await collection.findOne({
+        _id: new ObjectId(task.id),
+      });
+
+      expect(taskInDB).toBeNull();
+    });
+
+    test('deletes task by task kind and idempotency key removing from datastore', async () => {
+      const when = new Date();
+
+      const task = await dataStore.schedule({
+        idempotencyKey: 'test-idempotency-key',
+        kind: 'test',
+        data: { test: 'test' },
+        priority: 1,
+        when,
+      });
+
+      await dataStore.delete({ kind: task.kind, idempotencyKey: task.idempotencyKey ?? 'undefined' });
 
       const taskInDB = await collection.findOne({
         _id: new ObjectId(task.id),
@@ -370,8 +390,33 @@ describe('ChronoMongoDatastore', () => {
       await dataStore.claim({ kind: task.kind });
 
       await expect(dataStore.delete(task.id)).rejects.toThrow(
-        `Task ${task.id} can not be deleted as it may not exist or it's not in PENDING status.`,
+        `Task with id ${task.id} can not be deleted as it may not exist or it's not in PENDING status.`,
       );
+    });
+
+    test('force deletes PENDING task removing from datastore', async () => {
+      const when = new Date();
+
+      const task = await dataStore.schedule({
+        kind: 'test',
+        data: { test: 'test' },
+        priority: 1,
+        when,
+      });
+
+      await dataStore.claim({ kind: task.kind });
+
+      await dataStore.delete(task.id, { force: true });
+
+      const taskInDB = await collection.findOne({
+        _id: new ObjectId(task.id),
+      });
+
+      expect(taskInDB).toBeNull();
+    });
+
+    test('noops when force deleting a task that does not exist', async () => {
+      await dataStore.delete(new ObjectId().toHexString(), { force: true });
     });
   });
 });
