@@ -124,12 +124,6 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> exten
       configuration: input.processorConfiguration,
     });
 
-    if (processor.getTaskHandlerTimeoutMs() >= this.datastore.getClaimStaleTimeoutMs()) {
-      throw new Error(
-        `Task handler timeout (${processor.getTaskHandlerTimeoutMs()}ms) must be less than the claim stale timeout (${this.datastore.getClaimStaleTimeoutMs()}ms)`,
-      );
-    }
-
     this.processors.set(input.kind, processor);
 
     return processor;

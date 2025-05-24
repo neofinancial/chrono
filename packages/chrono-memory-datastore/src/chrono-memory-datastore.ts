@@ -8,32 +8,13 @@ import {
 } from '@neofinancial/chrono-core';
 import type { DeleteInput, DeleteOptions } from '@neofinancial/chrono-core/build/datastore';
 
-const DEFAULT_CLAIM_STALE_TIMEOUT = 10_000; // 10 seconds
-
-type ChronoMemoryDatastoreConfig = {
-  claimStaleTimeout: number;
-};
-
 export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDatastoreOptions>
   implements Datastore<TaskMapping, MemoryDatastoreOptions>
 {
   private store: Map<string, Task<keyof TaskMapping, TaskMapping[keyof TaskMapping]>>;
-  private config: ChronoMemoryDatastoreConfig;
 
-  constructor(config?: Partial<ChronoMemoryDatastoreConfig>) {
+  constructor() {
     this.store = new Map();
-    this.config = {
-      claimStaleTimeout: config?.claimStaleTimeout || DEFAULT_CLAIM_STALE_TIMEOUT,
-    };
-  }
-
-  /**
-   * Returns the timeout for claimed tasks.
-   *
-   * @returns The timeout in milliseconds.
-   */
-  getClaimStaleTimeoutMs(): number {
-    return this.config.claimStaleTimeout;
   }
 
   /**
@@ -134,7 +115,7 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
         t.kind === input.kind &&
         t.status === TaskStatus.CLAIMED &&
         t.claimedAt &&
-        t.claimedAt <= new Date(now.getTime() - this.config.claimStaleTimeout)
+        t.claimedAt <= new Date(now.getTime() - input.claimStaleTimeoutMs)
       ) {
         return t;
       }

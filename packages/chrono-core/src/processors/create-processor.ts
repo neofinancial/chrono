@@ -7,6 +7,7 @@ import { SimpleProcessor } from './simple-processor';
 export type ProcessorConfiguration = {
   maxConcurrency?: number;
   claimIntervalMs?: number;
+  claimStaleTimeoutMs?: number;
   idleIntervalMs?: number;
   taskHandlerTimeoutMs?: number;
   taskHandlerMaxRetries?: number;
@@ -40,6 +41,7 @@ export function createProcessor<
     claimIntervalMs: input.configuration?.claimIntervalMs,
     idleIntervalMs: input.configuration?.idleIntervalMs,
     taskHandlerTimeoutMs: input.configuration?.taskHandlerTimeoutMs,
+    claimStaleTimeoutMs: input.configuration?.claimStaleTimeoutMs,
     taskHandlerMaxRetries: input.configuration?.taskHandlerMaxRetries,
   });
 }

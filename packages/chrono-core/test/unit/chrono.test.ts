@@ -202,20 +202,20 @@ describe('Chrono', () => {
 
     test('throws an error if the task handler timeout is equal to task claim stale timeout', () => {
       const mockHandler = vitest.fn();
-      const mockClaimStaleTimeoutMs = 1000;
-
-      mockDatastore.getClaimStaleTimeoutMs.mockReturnValue(mockClaimStaleTimeoutMs);
+      const mockClaimStaleTimeoutMs = 5_000;
+      const mockTaskHandlerTimeoutMs = mockClaimStaleTimeoutMs;
 
       expect(() =>
         chronoInstance.registerTaskHandler({
           kind: 'send-test-task',
           handler: mockHandler,
           processorConfiguration: {
-            taskHandlerTimeoutMs: mockClaimStaleTimeoutMs,
+            taskHandlerTimeoutMs: mockTaskHandlerTimeoutMs,
+            claimStaleTimeoutMs: mockClaimStaleTimeoutMs,
           },
         }),
       ).toThrow(
-        `Task handler timeout (${mockClaimStaleTimeoutMs}ms) must be less than the claim stale timeout (${mockClaimStaleTimeoutMs}ms)`,
+        `Task handler timeout (${mockTaskHandlerTimeoutMs}ms) must be less than the claim stale timeout (${mockClaimStaleTimeoutMs}ms)`,
       );
     });
 
@@ -224,14 +224,13 @@ describe('Chrono', () => {
       const mockClaimStaleTimeoutMs = 1000;
       const mockTaskHandlerTimeoutMs = mockClaimStaleTimeoutMs + 1;
 
-      mockDatastore.getClaimStaleTimeoutMs.mockReturnValue(mockClaimStaleTimeoutMs);
-
       expect(() =>
         chronoInstance.registerTaskHandler({
           kind: 'send-test-task',
           handler: mockHandler,
           processorConfiguration: {
             taskHandlerTimeoutMs: mockTaskHandlerTimeoutMs,
+            claimStaleTimeoutMs: mockClaimStaleTimeoutMs,
           },
         }),
       ).toThrow(

@@ -46,6 +46,7 @@ export type ScheduleInput<TaskKind, TaskData, DatastoreOptions> = {
 
 export type ClaimTaskInput<TaskKind> = {
   kind: TaskKind;
+  claimStaleTimeoutMs: number;
 };
 
 export type DeleteByIdempotencyKeyInput<TaskKind> = {
@@ -80,5 +81,4 @@ export interface Datastore<TaskMapping extends TaskMappingBase, DatastoreOptions
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
   complete<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
   fail<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
-  getClaimStaleTimeoutMs(): number;
 }

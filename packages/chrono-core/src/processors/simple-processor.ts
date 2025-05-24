@@ -9,6 +9,7 @@ import type { Processor } from './processor';
 
 const DEFAULT_MAX_CONCURRENCY = 1;
 const DEFAULT_CLAIM_INTERVAL_MS = 50;
+const DEFAULT_CLAIM_STALE_TIMEOUT_MS = 10_000;
 const DEFAULT_IDLE_INTERVAL_MS = 5_000;
 const DEFAULT_TASK_HANDLER_TIMEOUT_MS = 5_000;
 const DEFAULT_TASK_HANDLER_MAX_RETRIES = 10;
@@ -24,6 +25,7 @@ type SimpleProcessorConfig<
   maxConcurrency?: number;
   backoffStrategy: BackoffStrategy;
   claimIntervalMs?: number;
+  claimStaleTimeoutMs?: number;
   idleIntervalMs?: number;
   taskHandlerTimeoutMs?: number;
   taskHandlerMaxRetries?: number;
@@ -45,6 +47,7 @@ export class SimpleProcessor<
   private backOffStrategy: BackoffStrategy;
 
   readonly claimIntervalMs: number;
+  readonly claimStaleTimeoutMs: number;
   readonly idleIntervalMs: number;
 
   readonly taskHandlerTimeoutMs: number;
@@ -63,13 +66,28 @@ export class SimpleProcessor<
 
     this.maxConcurrency = config.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
     this.claimIntervalMs = config.claimIntervalMs || DEFAULT_CLAIM_INTERVAL_MS;
+    this.claimStaleTimeoutMs = config.claimStaleTimeoutMs || DEFAULT_CLAIM_STALE_TIMEOUT_MS;
     this.idleIntervalMs = config.idleIntervalMs || DEFAULT_IDLE_INTERVAL_MS;
     this.taskHandlerTimeoutMs = config.taskHandlerTimeoutMs || DEFAULT_TASK_HANDLER_TIMEOUT_MS;
     this.taskHandlerMaxRetries = config.taskHandlerMaxRetries || DEFAULT_TASK_HANDLER_MAX_RETRIES;
+
+    this.validatedHandlerTimeout();
   }
 
-  getTaskHandlerTimeoutMs(): number {
-    return this.taskHandlerTimeoutMs;
+  /**
+   * Validates that the task handler timeout is less than the claim stale timeout.
+   * Throws an error if the validation fails.
+   * This ensures that the task handler has enough time to complete before the task is considered stale.
+   * This is important to prevent tasks from being claimed again while they are still being processed.
+   *
+   * @throws {Error} If the task handler timeout is greater than or equal to the claim stale timeout.
+   */
+  private validatedHandlerTimeout() {
+    if (this.taskHandlerTimeoutMs >= this.claimStaleTimeoutMs) {
+      throw new Error(
+        `Task handler timeout (${this.taskHandlerTimeoutMs}ms) must be less than the claim stale timeout (${this.claimStaleTimeoutMs}ms)`,
+      );
+    }
   }
 
   /**
@@ -119,6 +137,7 @@ export class SimpleProcessor<
     while (!this.stopRequested) {
       const task = await this.datastore.claim({
         kind: this.taskKind,
+        claimStaleTimeoutMs: this.claimStaleTimeoutMs,
       });
 
       // If no tasks are available, wait before trying again
