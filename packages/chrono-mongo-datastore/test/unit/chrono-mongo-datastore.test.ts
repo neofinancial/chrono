@@ -145,7 +145,9 @@ describe('ChronoMongoDatastore', () => {
       });
 
       const fakeTimer = vitest.useFakeTimers();
-      fakeTimer.setSystemTime(new Date((claimedTask?.claimedAt?.getTime() as number) + 10_000 + 1));
+      fakeTimer.setSystemTime(
+        new Date((claimedTask?.claimedAt?.getTime() as number) + TEST_CLAIM_STALE_TIMEOUT_MS + 1),
+      );
 
       const claimedTaskAgainAgain = await dataStore.claim({
         kind: input.kind,
@@ -393,7 +395,7 @@ describe('ChronoMongoDatastore', () => {
         when,
       });
 
-      await dataStore.claim({ kind: task.kind, claimStaleTimeoutMs: 10_000 });
+      await dataStore.claim({ kind: task.kind, claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS });
 
       await expect(dataStore.delete(task.id)).rejects.toThrow(
         `Task with id ${task.id} can not be deleted as it may not exist or it's not in PENDING status.`,
@@ -410,7 +412,7 @@ describe('ChronoMongoDatastore', () => {
         when,
       });
 
-      await dataStore.claim({ kind: task.kind, claimStaleTimeoutMs: 10_000 });
+      await dataStore.claim({ kind: task.kind, claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS });
 
       await dataStore.delete(task.id, { force: true });
 
