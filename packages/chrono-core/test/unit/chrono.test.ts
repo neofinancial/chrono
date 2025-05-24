@@ -1,9 +1,10 @@
 import { faker } from '@faker-js/faker';
-import { describe, expect, test, vitest } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vitest } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 
 import { Chrono } from '../../src/chrono';
 import { type Datastore, type Task, TaskStatus } from '../../src/datastore';
+import { SimpleProcessor } from '../../src/processors/simple-processor';
 
 describe('Chrono', () => {
   type TaskData = { someField: number };
@@ -26,6 +27,10 @@ describe('Chrono', () => {
     scheduledAt: faker.date.future(),
     retryCount: 0,
   };
+
+  afterEach(() => {
+    vitest.resetAllMocks();
+  });
 
   describe('start', () => {
     test('emits ready event when chrono is instantiated successfully', async () => {
@@ -169,6 +174,79 @@ describe('Chrono', () => {
         taskId: mockTask.id,
         timestamp: expect.any(Date),
       });
+    });
+  });
+
+  describe('registerTaskHandler', () => {
+    let chronoInstance: Chrono<TaskMapping, DatastoreOptions>;
+
+    beforeEach(() => {
+      chronoInstance = new Chrono<TaskMapping, DatastoreOptions>(mockDatastore);
+    });
+
+    test('throws an error if the handler for the task kind already exists', () => {
+      const mockHandler = vitest.fn();
+
+      chronoInstance.registerTaskHandler({
+        kind: 'send-test-task',
+        handler: mockHandler,
+      });
+
+      expect(() =>
+        chronoInstance.registerTaskHandler({
+          kind: 'send-test-task',
+          handler: mockHandler,
+        }),
+      ).toThrow('Handler for task kind already exists');
+    });
+
+    test('throws an error if the task handler timeout is equal to task claim stale timeout', () => {
+      const mockHandler = vitest.fn();
+      const mockClaimStaleTimeoutMs = 5_000;
+      const mockTaskHandlerTimeoutMs = mockClaimStaleTimeoutMs;
+
+      expect(() =>
+        chronoInstance.registerTaskHandler({
+          kind: 'send-test-task',
+          handler: mockHandler,
+          processorConfiguration: {
+            taskHandlerTimeoutMs: mockTaskHandlerTimeoutMs,
+            claimStaleTimeoutMs: mockClaimStaleTimeoutMs,
+          },
+        }),
+      ).toThrow(
+        `Task handler timeout (${mockTaskHandlerTimeoutMs}ms) must be less than the claim stale timeout (${mockClaimStaleTimeoutMs}ms)`,
+      );
+    });
+
+    test('throws an error if the task handler timeout is greter than task claim stale timeout', () => {
+      const mockHandler = vitest.fn();
+      const mockClaimStaleTimeoutMs = 1000;
+      const mockTaskHandlerTimeoutMs = mockClaimStaleTimeoutMs + 1;
+
+      expect(() =>
+        chronoInstance.registerTaskHandler({
+          kind: 'send-test-task',
+          handler: mockHandler,
+          processorConfiguration: {
+            taskHandlerTimeoutMs: mockTaskHandlerTimeoutMs,
+            claimStaleTimeoutMs: mockClaimStaleTimeoutMs,
+          },
+        }),
+      ).toThrow(
+        `Task handler timeout (${mockTaskHandlerTimeoutMs}ms) must be less than the claim stale timeout (${mockClaimStaleTimeoutMs}ms)`,
+      );
+    });
+
+    test('registers a task handler successfully', () => {
+      const mockHandler = vitest.fn();
+
+      const result = chronoInstance.registerTaskHandler({
+        kind: 'send-test-task',
+        handler: mockHandler,
+      });
+
+      expect(result).toBeInstanceOf(SimpleProcessor);
     });
   });
 });

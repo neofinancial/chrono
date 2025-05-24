@@ -104,15 +104,28 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
   async claim<TaskKind extends keyof TaskMapping>(
     input: ClaimTaskInput<TaskKind>,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined> {
-    const claimedTask = Array.from(this.store.values()).find(
-      (t): t is Task<TaskKind, TaskMapping[TaskKind]> => t.kind === input.kind && t.status === TaskStatus.PENDING,
-    );
+    const now = new Date();
+
+    const claimedTask = Array.from(this.store.values()).find((t) => {
+      if (t.kind === input.kind && t.status === TaskStatus.PENDING) {
+        return t;
+      }
+
+      if (
+        t.kind === input.kind &&
+        t.status === TaskStatus.CLAIMED &&
+        t.claimedAt &&
+        t.claimedAt <= new Date(now.getTime() - input.claimStaleTimeoutMs)
+      ) {
+        return t;
+      }
+    });
 
     if (claimedTask) {
       claimedTask.status = TaskStatus.CLAIMED;
-      claimedTask.claimedAt = new Date();
+      claimedTask.claimedAt = now;
 
-      return claimedTask;
+      return claimedTask as Task<TaskKind, TaskMapping[TaskKind]>;
     }
   }
 
