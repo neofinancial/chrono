@@ -13,7 +13,7 @@ type TaskMapping = {
 };
 
 const TEST_DB_COLLECTION_NAME = 'test_tasks';
-const TEST_CLAIM_STALE_TIMEOUT = 1000; // 1 second
+const TEST_CLAIM_STALE_TIMEOUT_MS = 1_000; // 1 second
 
 describe('ChronoMongoDatastore', () => {
   let mongoClient: MongoClient;
@@ -28,7 +28,6 @@ describe('ChronoMongoDatastore', () => {
 
     dataStore = await ChronoMongoDatastore.create(mongoClient.db(DB_NAME), {
       collectionName: TEST_DB_COLLECTION_NAME,
-      claimStaleTimeout: TEST_CLAIM_STALE_TIMEOUT,
     });
   });
 
@@ -121,6 +120,7 @@ describe('ChronoMongoDatastore', () => {
       });
       const claimedTask = await dataStore.claim({
         kind: input.kind,
+        claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS,
       });
       expect(claimedTask).toEqual(
         expect.objectContaining({
@@ -136,17 +136,20 @@ describe('ChronoMongoDatastore', () => {
 
       const claimedTask = await dataStore.claim({
         kind: input.kind,
+        claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS,
       });
 
       const claimedTaskAgain = await dataStore.claim({
         kind: input.kind,
+        claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS,
       });
 
       const fakeTimer = vitest.useFakeTimers();
-      fakeTimer.setSystemTime(new Date((claimedTask?.claimedAt?.getTime() as number) + TEST_CLAIM_STALE_TIMEOUT + 1));
+      fakeTimer.setSystemTime(new Date((claimedTask?.claimedAt?.getTime() as number) + 10_000 + 1));
 
       const claimedTaskAgainAgain = await dataStore.claim({
         kind: input.kind,
+        claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS,
       });
       fakeTimer.useRealTimers();
 
@@ -179,12 +182,15 @@ describe('ChronoMongoDatastore', () => {
       const claimedTasks = await Promise.all([
         dataStore.claim({
           kind: input.kind,
+          claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS,
         }),
         dataStore.claim({
           kind: input.kind,
+          claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS,
         }),
         dataStore.claim({
           kind: input.kind,
+          claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS,
         }),
       ]);
 
@@ -387,7 +393,7 @@ describe('ChronoMongoDatastore', () => {
         when,
       });
 
-      await dataStore.claim({ kind: task.kind });
+      await dataStore.claim({ kind: task.kind, claimStaleTimeoutMs: 10_000 });
 
       await expect(dataStore.delete(task.id)).rejects.toThrow(
         `Task with id ${task.id} can not be deleted as it may not exist or it's not in PENDING status.`,
@@ -404,7 +410,7 @@ describe('ChronoMongoDatastore', () => {
         when,
       });
 
-      await dataStore.claim({ kind: task.kind });
+      await dataStore.claim({ kind: task.kind, claimStaleTimeoutMs: 10_000 });
 
       await dataStore.delete(task.id, { force: true });
 
