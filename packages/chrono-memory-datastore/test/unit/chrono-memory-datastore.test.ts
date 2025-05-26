@@ -118,7 +118,28 @@ describe('ChronoMemoryDatastore', () => {
       const deletedTask = await memoryDatastore.delete(task.id);
 
       await expect(memoryDatastore.delete(task.id)).rejects.toThrow(
-        `Task ${task.id} can not be deleted as it may not exist or it's not in PENDING status.`,
+        `Task with id ${task.id} can not be deleted as it may not exist or it's not in PENDING status.`,
+      );
+
+      expect(deletedTask).toEqual(task);
+    });
+
+    test('deletes task by kind and idempotency key', async () => {
+      const when = new Date();
+      const idempotencyKey = 'test-idempotency-key';
+
+      const task = await memoryDatastore.schedule({
+        when,
+        kind: 'send-test-task',
+        data: { someField: 123 },
+        idempotencyKey,
+        datastoreOptions: {},
+      });
+
+      const deletedTask = await memoryDatastore.delete({ kind: task.kind, idempotencyKey });
+
+      await expect(memoryDatastore.delete(task.id)).rejects.toThrow(
+        `Task with id ${task.id} can not be deleted as it may not exist or it's not in PENDING status.`,
       );
 
       expect(deletedTask).toEqual(task);
@@ -139,8 +160,31 @@ describe('ChronoMemoryDatastore', () => {
       await memoryDatastore.claim({ kind: task.kind });
 
       await expect(memoryDatastore.delete(task.id)).rejects.toThrow(
-        `Task ${task.id} can not be deleted as it may not exist or it's not in PENDING status.`,
+        `Task with id ${task.id} can not be deleted as it may not exist or it's not in PENDING status.`,
       );
+    });
+
+    test('allows force deleting a task that is not PENDING', async () => {
+      const when = new Date();
+      const idempotencyKey = 'test-idempotency-key';
+
+      const task = await memoryDatastore.schedule({
+        when,
+        kind: 'send-test-task',
+        data: { someField: 123 },
+        idempotencyKey,
+        datastoreOptions: {},
+      });
+
+      await memoryDatastore.claim({ kind: task.kind });
+
+      await memoryDatastore.delete(task.id, { force: true });
+
+      await expect(memoryDatastore.unclaim(task.id, new Date())).rejects.toThrow(`Task with id ${task.id} not found`);
+    });
+
+    test('noops when force deleting a task that does not exist', async () => {
+      await memoryDatastore.delete('not-an-id', { force: true });
     });
   });
 });
