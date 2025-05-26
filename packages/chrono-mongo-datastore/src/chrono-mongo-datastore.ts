@@ -18,12 +18,10 @@ import {
 import { IndexNames, ensureIndexes } from './mongo-indexes';
 
 const DEFAULT_COLLECTION_NAME = 'chrono-tasks';
-const DEFAULT_CLAIM_STALE_TIMEOUT = 10_000; // 10 seconds
 
 export type ChronoMongoDatastoreConfig = {
   completedDocumentTTL?: number;
   collectionName: string;
-  claimStaleTimeout: number;
 };
 
 export type MongoDatastoreOptions = {
@@ -42,7 +40,6 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     this.database = database;
     this.config = {
       completedDocumentTTL: config?.completedDocumentTTL,
-      claimStaleTimeout: config?.claimStaleTimeout || DEFAULT_CLAIM_STALE_TIMEOUT,
       collectionName: config?.collectionName || DEFAULT_COLLECTION_NAME,
     };
   }
@@ -154,7 +151,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
           {
             status: TaskStatus.CLAIMED,
             claimedAt: {
-              $lte: new Date(now.getTime() - this.config.claimStaleTimeout),
+              $lte: new Date(now.getTime() - input.claimStaleTimeoutMs),
             },
           },
         ],

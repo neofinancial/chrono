@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:stream';
 import type { BackoffStrategyOptions } from './backoff-strategy';
 import type { Datastore, ScheduleInput, Task } from './datastore';
 import { type Processor, createProcessor } from './processors';
+import type { ProcessorConfiguration } from './processors/create-processor';
 import { promiseWithTimeout } from './utils/promise-utils';
 
 export type TaskMappingBase = Record<string, unknown>;
@@ -17,6 +18,7 @@ export type RegisterTaskHandlerInput<TaskKind, TaskData> = {
   kind: TaskKind;
   handler: (task: Task<TaskKind, TaskData>) => Promise<void>;
   backoffStrategyOptions?: BackoffStrategyOptions;
+  processorConfiguration?: ProcessorConfiguration;
 };
 
 /**
@@ -119,7 +121,7 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> exten
       kind: input.kind,
       datastore: this.datastore,
       handler: input.handler,
-      configuration: { maxConcurrency: 1 },
+      configuration: input.processorConfiguration,
     });
 
     this.processors.set(input.kind, processor);

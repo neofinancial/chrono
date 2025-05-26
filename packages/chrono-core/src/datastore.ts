@@ -46,6 +46,7 @@ export type ScheduleInput<TaskKind, TaskData, DatastoreOptions> = {
 
 export type ClaimTaskInput<TaskKind> = {
   kind: TaskKind;
+  claimStaleTimeoutMs: number;
 };
 
 export type DeleteByIdempotencyKeyInput<TaskKind> = {

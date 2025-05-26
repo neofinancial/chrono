@@ -5,7 +5,12 @@ import type { Processor } from './processor';
 import { SimpleProcessor } from './simple-processor';
 
 export type ProcessorConfiguration = {
-  maxConcurrency: number;
+  maxConcurrency?: number;
+  claimIntervalMs?: number;
+  claimStaleTimeoutMs?: number;
+  idleIntervalMs?: number;
+  taskHandlerTimeoutMs?: number;
+  taskHandlerMaxRetries?: number;
 };
 
 export type CreateProcessorInput<
@@ -16,7 +21,7 @@ export type CreateProcessorInput<
   kind: TaskKind;
   datastore: Datastore<TaskMapping, DatastoreOptions>;
   handler: (task: Task<TaskKind, TaskMapping[TaskKind]>) => Promise<void>;
-  configuration: ProcessorConfiguration;
+  configuration?: ProcessorConfiguration;
   backoffStrategyOptions?: BackoffStrategyOptions;
 };
 
@@ -31,7 +36,12 @@ export function createProcessor<
     datastore: input.datastore,
     kind: input.kind,
     handler: input.handler,
-    maxConcurrency: input.configuration.maxConcurrency,
+    maxConcurrency: input.configuration?.maxConcurrency,
     backoffStrategy,
+    claimIntervalMs: input.configuration?.claimIntervalMs,
+    idleIntervalMs: input.configuration?.idleIntervalMs,
+    taskHandlerTimeoutMs: input.configuration?.taskHandlerTimeoutMs,
+    claimStaleTimeoutMs: input.configuration?.claimStaleTimeoutMs,
+    taskHandlerMaxRetries: input.configuration?.taskHandlerMaxRetries,
   });
 }
