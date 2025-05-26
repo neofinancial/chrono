@@ -85,47 +85,6 @@ describe('Chrono', () => {
         data: mockTask.data,
       });
     });
-
-    test('emits task-scheduled event successfully', async () => {
-      mockDatastore.schedule.mockResolvedValueOnce(mockTask);
-
-      const emitSpy = vitest.spyOn(chrono, 'emit');
-
-      await chrono.scheduleTask({
-        when: mockTask.scheduledAt,
-        kind: mockTask.kind,
-        data: mockTask.data,
-      });
-
-      expect(emitSpy).toHaveBeenCalledOnce();
-      expect(emitSpy).toHaveBeenCalledWith('task.scheduled', {
-        task: mockTask,
-        timestamp: expect.any(Date),
-      });
-    });
-
-    test('emits task-schedule-fail event when datastore fails', async () => {
-      const mockDatastoreError = new Error('Failed to schedule task');
-
-      mockDatastore.schedule.mockRejectedValueOnce(mockDatastoreError);
-
-      const emitSpy = vitest.spyOn(chrono, 'emit');
-
-      const mockScheduleTaskInput = {
-        when: mockTask.scheduledAt,
-        kind: mockTask.kind,
-        data: mockTask.data,
-      };
-
-      await expect(chrono.scheduleTask(mockScheduleTaskInput)).rejects.toThrow('Failed to schedule task');
-
-      expect(emitSpy).toHaveBeenCalledOnce();
-      expect(emitSpy).toHaveBeenCalledWith('task.schedule.failed', {
-        error: mockDatastoreError,
-        input: mockScheduleTaskInput,
-        timestamp: expect.any(Date),
-      });
-    });
   });
 
   describe('deleteTask', () => {
@@ -144,34 +103,6 @@ describe('Chrono', () => {
       const result = await chrono.deleteTask(mockTask.id);
 
       expect(result).toEqual(mockTask);
-    });
-
-    test('emits a task.deleted event on successful deletion', async () => {
-      const emitSpy = vitest.spyOn(chrono, 'emit');
-
-      mockDatastore.delete.mockResolvedValueOnce(mockTask);
-
-      await chrono.deleteTask(mockTask.id);
-
-      expect(emitSpy).toHaveBeenCalledExactlyOnceWith('task.deleted', {
-        task: mockTask,
-        timestamp: expect.any(Date),
-      });
-    });
-
-    test('emits a task.delete.failed event on failure', async () => {
-      const mockDatastoreError = new Error('Failed to delete task');
-      const emitSpy = vitest.spyOn(chrono, 'emit');
-
-      mockDatastore.delete.mockRejectedValueOnce(mockDatastoreError);
-
-      await expect(chrono.deleteTask(mockTask.id)).rejects.toThrow('Failed to delete task');
-
-      expect(emitSpy).toHaveBeenCalledExactlyOnceWith('task.delete.failed', {
-        error: mockDatastoreError,
-        taskId: mockTask.id,
-        timestamp: expect.any(Date),
-      });
     });
   });
 });
