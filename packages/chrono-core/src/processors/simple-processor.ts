@@ -147,6 +147,8 @@ export class SimpleProcessor<
         continue;
       }
 
+      this.emit('task.claimed', { task, timestamp: new Date() });
+
       // Process the task using the handler
       await this.handleTask(task);
 
