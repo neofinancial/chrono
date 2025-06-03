@@ -29,7 +29,7 @@ export function createProcessor<
   TaskKind extends Extract<keyof TaskMapping, string>,
   TaskMapping extends TaskMappingBase,
   DatastoreOptions,
->(input: CreateProcessorInput<TaskKind, TaskMapping, DatastoreOptions>): Processor {
+>(input: CreateProcessorInput<TaskKind, TaskMapping, DatastoreOptions>): Processor<TaskKind, TaskMapping> {
   const backoffStrategy = backoffStrategyFactory(input.backoffStrategyOptions);
   // add more processors here
   return new SimpleProcessor<TaskKind, TaskMapping, DatastoreOptions>({
