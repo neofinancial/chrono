@@ -5,7 +5,7 @@ import type { BackoffStrategy } from '../backoff-strategy';
 import type { TaskMappingBase } from '../chrono';
 import type { Datastore, Task } from '../datastore';
 import { promiseWithTimeout } from '../utils/promise-utils';
-import type { Processor } from './processor';
+import type { Processor, ProcessorEvents } from './processor';
 
 const DEFAULT_MAX_CONCURRENCY = 1;
 const DEFAULT_CLAIM_INTERVAL_MS = 50;
@@ -36,8 +36,8 @@ export class SimpleProcessor<
     TaskMapping extends TaskMappingBase,
     DatastoreOptions,
   >
-  extends EventEmitter
-  implements Processor
+  extends EventEmitter<ProcessorEvents<TaskKind, TaskMapping>>
+  implements Processor<TaskKind, TaskMapping>
 {
   readonly taskKind: TaskKind;
   readonly datastore: Datastore<TaskMapping, DatastoreOptions>;
@@ -105,7 +105,7 @@ export class SimpleProcessor<
       this.exitChannels.push(exitChannel);
 
       const errorHandler = (error: Error) => {
-        this.emit('processloop.error', { error });
+        // this.emit('processloop.error', { error });
 
         this.runProcessLoop(exitChannel).catch(errorHandler);
       };
@@ -147,7 +147,7 @@ export class SimpleProcessor<
         continue;
       }
 
-      this.emit('task.claimed', { task, timestamp: new Date() });
+      // this.emit('task.claimed', { task, timestamp: new Date() });
 
       // Process the task using the handler
       await this.handleTask(task);
@@ -179,18 +179,18 @@ export class SimpleProcessor<
     }
 
     try {
-      const completedTask = await this.datastore.complete(task.id);
+      const completedTask = await this.datastore.complete<TaskKind>(task.id);
 
-      this.emit('task.completed', {
+      this.emit('task:completed', {
         task: completedTask,
-        timestamp: completedTask.completedAt,
+        timestamp: completedTask.completedAt || new Date(),
       });
     } catch (error) {
-      this.emit('task.complete.failed', {
-        error,
-        task,
-        timestamp: new Date(),
-      });
+      // this.emit('task.complete.failed', {
+      //   error,
+      //   task,
+      //   timestamp: new Date(),
+      // });
     }
   }
 
@@ -198,7 +198,7 @@ export class SimpleProcessor<
     if (task.retryCount >= this.taskHandlerMaxRetries) {
       // Mark the task as failed
       await this.datastore.fail(task.id);
-      this.emit('task.failed', {
+      this.emit('task:failed', {
         task,
         error,
         timestamp: new Date(),
@@ -211,7 +211,7 @@ export class SimpleProcessor<
     const nextScheduledAt = new Date(Date.now() + delay);
 
     await this.datastore.unclaim(task.id, nextScheduledAt);
-    this.emit('task.unclaimed', {
+    this.emit('task:unclaimed', {
       task,
       error,
       timestamp: new Date(),

@@ -35,7 +35,7 @@ export type RegisterTaskHandlerInput<TaskKind, TaskData> = {
 
 export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> extends EventEmitter {
   private datastore: Datastore<TaskMapping, DatastoreOptions>;
-  private processors: Map<keyof TaskMapping, Processor> = new Map();
+  private processors: Map<keyof TaskMapping, Processor<Extract<keyof TaskMapping, string>, TaskMapping>> = new Map();
 
   readonly exitTimeoutMs = 60_000;
 
@@ -90,7 +90,7 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> exten
 
   public registerTaskHandler<TaskKind extends Extract<keyof TaskMapping, string>>(
     input: RegisterTaskHandlerInput<TaskKind, TaskMapping[TaskKind]>,
-  ): Processor {
+  ): Processor<TaskKind, TaskMapping> {
     if (this.processors.has(input.kind)) {
       throw new Error('Handler for task kind already exists');
     }
