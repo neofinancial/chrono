@@ -60,7 +60,7 @@ describe('ChronoMongoDatastore', () => {
             originalScheduleDate: expect.any(Date),
             scheduledAt: expect.any(Date),
             id: expect.any(String),
-            retryCount: 0,
+            claimCount: 0,
           }),
         );
       });
@@ -80,7 +80,7 @@ describe('ChronoMongoDatastore', () => {
             priority: input.priority,
             originalScheduleDate: expect.any(Date),
             scheduledAt: expect.any(Date),
-            retryCount: 0,
+            claimCount: 0,
           }),
         );
       });
@@ -282,8 +282,8 @@ describe('ChronoMongoDatastore', () => {
     });
   });
 
-  describe('unclaim', () => {
-    test('should unclaim task', async () => {
+  describe('reschedule', () => {
+    test('should reschedule task', async () => {
       const firstScheduleDate = faker.date.past();
       const secondScheduleDate = faker.date.past();
 
@@ -297,13 +297,13 @@ describe('ChronoMongoDatastore', () => {
       expect(task).toEqual(
         expect.objectContaining({
           status: TaskStatus.PENDING,
-          retryCount: 0,
+          claimCount: 0,
           scheduledAt: firstScheduleDate,
           originalScheduleDate: firstScheduleDate,
         }),
       );
 
-      const unclaimedTask = await dataStore.unclaim(task.id, secondScheduleDate);
+      const unclaimedTask = await dataStore.reschedule(task.id, secondScheduleDate);
       const taskDocument = await collection.findOne({
         _id: new ObjectId(task.id),
       });
@@ -314,7 +314,7 @@ describe('ChronoMongoDatastore', () => {
           status: TaskStatus.PENDING,
           scheduledAt: secondScheduleDate,
           originalScheduleDate: firstScheduleDate,
-          retryCount: 1,
+          claimCount: 0,
         }),
       );
       expect(unclaimedTask).toEqual(
@@ -324,7 +324,7 @@ describe('ChronoMongoDatastore', () => {
           status: TaskStatus.PENDING,
           scheduledAt: secondScheduleDate,
           originalScheduleDate: firstScheduleDate,
-          retryCount: 1,
+          claimCount: 0,
         }),
       );
     });

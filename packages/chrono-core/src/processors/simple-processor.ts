@@ -28,7 +28,7 @@ type SimpleProcessorConfig<
   claimStaleTimeoutMs?: number;
   idleIntervalMs?: number;
   taskHandlerTimeoutMs?: number;
-  taskHandlerMaxRetries?: number;
+  taskHandlerMaxClaimAttempts?: number;
 };
 
 export class SimpleProcessor<
@@ -51,7 +51,7 @@ export class SimpleProcessor<
   readonly idleIntervalMs: number;
 
   readonly taskHandlerTimeoutMs: number;
-  readonly taskHandlerMaxRetries: number;
+  readonly taskHandlerMaxClaimAttempts: number;
 
   private exitChannels: EventEmitter[] = [];
   private stopRequested = false;
@@ -69,7 +69,7 @@ export class SimpleProcessor<
     this.claimStaleTimeoutMs = config.claimStaleTimeoutMs || DEFAULT_CLAIM_STALE_TIMEOUT_MS;
     this.idleIntervalMs = config.idleIntervalMs || DEFAULT_IDLE_INTERVAL_MS;
     this.taskHandlerTimeoutMs = config.taskHandlerTimeoutMs || DEFAULT_TASK_HANDLER_TIMEOUT_MS;
-    this.taskHandlerMaxRetries = config.taskHandlerMaxRetries || DEFAULT_TASK_HANDLER_MAX_RETRIES;
+    this.taskHandlerMaxClaimAttempts = config.taskHandlerMaxClaimAttempts || DEFAULT_TASK_HANDLER_MAX_RETRIES;
 
     this.validatedHandlerTimeout();
   }
@@ -195,7 +195,7 @@ export class SimpleProcessor<
   }
 
   private async handleTaskError(task: Task<TaskKind, TaskMapping[TaskKind]>, error: Error): Promise<void> {
-    if (task.retryCount >= this.taskHandlerMaxRetries) {
+    if (task.claimCount >= this.taskHandlerMaxClaimAttempts) {
       // Mark the task as failed
       await this.datastore.fail(task.id);
       this.emit('task:failed', {
@@ -207,11 +207,11 @@ export class SimpleProcessor<
       return;
     }
 
-    const delay = this.backOffStrategy({ retryAttempt: task.retryCount });
+    const delay = this.backOffStrategy({ retryAttempt: task.claimCount });
     const nextScheduledAt = new Date(Date.now() + delay);
 
-    await this.datastore.unclaim(task.id, nextScheduledAt);
-    this.emit('task:unclaimed', {
+    await this.datastore.reschedule(task.id, nextScheduledAt);
+    this.emit('task:reschedule', {
       task,
       error,
       timestamp: new Date(),

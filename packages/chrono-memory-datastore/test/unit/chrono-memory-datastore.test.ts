@@ -43,7 +43,7 @@ describe('ChronoMemoryDatastore', () => {
         claimedAt: undefined,
         lastExecutedAt: undefined,
         completedAt: undefined,
-        retryCount: 0,
+        claimCount: 0,
       });
     });
 
@@ -74,7 +74,7 @@ describe('ChronoMemoryDatastore', () => {
         scheduledAt: when,
         lastExecutedAt: undefined,
         completedAt: undefined,
-        retryCount: 0,
+        claimCount: 0,
       });
     });
 
@@ -157,7 +157,7 @@ describe('ChronoMemoryDatastore', () => {
         datastoreOptions: {},
       });
 
-      await memoryDatastore.claim({ kind: task.kind });
+      await memoryDatastore.claim({ kind: task.kind, claimStaleTimeoutMs: 1000 });
 
       await expect(memoryDatastore.delete(task.id)).rejects.toThrow(
         `Task with id ${task.id} can not be deleted as it may not exist or it's not in PENDING status.`,
@@ -176,11 +176,13 @@ describe('ChronoMemoryDatastore', () => {
         datastoreOptions: {},
       });
 
-      await memoryDatastore.claim({ kind: task.kind });
+      await memoryDatastore.claim({ kind: task.kind, claimStaleTimeoutMs: 1000 });
 
       await memoryDatastore.delete(task.id, { force: true });
 
-      await expect(memoryDatastore.unclaim(task.id, new Date())).rejects.toThrow(`Task with id ${task.id} not found`);
+      await expect(memoryDatastore.reschedule(task.id, new Date())).rejects.toThrow(
+        `Task with id ${task.id} not found`,
+      );
     });
 
     test('noops when force deleting a task that does not exist', async () => {

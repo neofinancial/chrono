@@ -68,7 +68,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
       idempotencyKey: input.idempotencyKey,
       originalScheduleDate: input.when,
       scheduledAt: input.when,
-      retryCount: 0,
+      claimCount: 0,
     };
 
     try {
@@ -156,7 +156,12 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
           },
         ],
       },
-      { $set: { status: TaskStatus.CLAIMED, claimedAt: now } },
+      {
+        $set: { status: TaskStatus.CLAIMED, claimedAt: now },
+        $inc: {
+          claimCount: 1,
+        },
+      },
       {
         sort: { priority: -1, scheduledAt: 1 },
         // hint: IndexNames.CLAIM_DOCUMENT_INDEX as unknown as Document,
@@ -167,7 +172,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     return task ? this.toObject(task) : undefined;
   }
 
-  async unclaim<TaskKind extends keyof TaskMapping>(
+  async reschedule<TaskKind extends keyof TaskMapping>(
     taskId: string,
     nextScheduledAt: Date,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
@@ -175,9 +180,6 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
       $set: {
         status: TaskStatus.PENDING,
         scheduledAt: nextScheduledAt,
-      },
-      $inc: {
-        retryCount: 1,
       },
     });
 
@@ -242,7 +244,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
       scheduledAt: document.scheduledAt,
       claimedAt: document.claimedAt ?? undefined,
       completedAt: document.completedAt ?? undefined,
-      retryCount: document.retryCount,
+      claimCount: document.claimCount,
     };
   }
 }

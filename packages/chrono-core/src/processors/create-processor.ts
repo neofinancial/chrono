@@ -10,7 +10,7 @@ export type ProcessorConfiguration = {
   claimStaleTimeoutMs?: number;
   idleIntervalMs?: number;
   taskHandlerTimeoutMs?: number;
-  taskHandlerMaxRetries?: number;
+  taskHandlerMaxClaimAttempts?: number;
 };
 
 export type CreateProcessorInput<
@@ -42,6 +42,6 @@ export function createProcessor<
     idleIntervalMs: input.configuration?.idleIntervalMs,
     taskHandlerTimeoutMs: input.configuration?.taskHandlerTimeoutMs,
     claimStaleTimeoutMs: input.configuration?.claimStaleTimeoutMs,
-    taskHandlerMaxRetries: input.configuration?.taskHandlerMaxRetries,
+    taskHandlerMaxClaimAttempts: input.configuration?.taskHandlerMaxClaimAttempts,
   });
 }
