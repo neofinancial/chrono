@@ -35,7 +35,7 @@ export type RegisterTaskHandlerInput<TaskKind, TaskData> = {
 
 export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> extends EventEmitter {
   private datastore: Datastore<TaskMapping, DatastoreOptions>;
-  private processors: Map<keyof TaskMapping, Processor<Extract<keyof TaskMapping, string>, TaskMapping>> = new Map();
+  private processors: Map<keyof TaskMapping, Processor<keyof TaskMapping, TaskMapping>> = new Map();
 
   readonly exitTimeoutMs = 60_000;
 

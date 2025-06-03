@@ -100,7 +100,7 @@ export class SimpleProcessor<
     }
 
     for (let i = 0; i < this.maxConcurrency; i++) {
-      const exitChannel = new EventEmitter();
+      const exitChannel = new EventEmitter<{ 'processloop:exit': [] }>();
 
       this.exitChannels.push(exitChannel);
 
@@ -133,7 +133,7 @@ export class SimpleProcessor<
    *
    * @param exitChannel The channel to signal when the loop exits.
    */
-  private async runProcessLoop(exitChannel: EventEmitter): Promise<void> {
+  private async runProcessLoop(exitChannel: EventEmitter<{ 'processloop:exit': [] }>): Promise<void> {
     while (!this.stopRequested) {
       const task = await this.datastore.claim({
         kind: this.taskKind,
@@ -147,7 +147,7 @@ export class SimpleProcessor<
         continue;
       }
 
-      // this.emit('task.claimed', { task, timestamp: new Date() });
+      this.emit('task:claimed', { task, timestamp: new Date() });
 
       // Process the task using the handler
       await this.handleTask(task);
@@ -156,7 +156,7 @@ export class SimpleProcessor<
       await setTimeout(this.claimIntervalMs);
     }
 
-    exitChannel.emit('processloop.exit');
+    exitChannel.emit('processloop:exit');
   }
 
   /**
@@ -186,11 +186,11 @@ export class SimpleProcessor<
         timestamp: completedTask.completedAt || new Date(),
       });
     } catch (error) {
-      // this.emit('task.complete.failed', {
-      //   error,
-      //   task,
-      //   timestamp: new Date(),
-      // });
+      this.emit('task:completion:failed', {
+        error,
+        task,
+        timestamp: new Date(),
+      });
     }
   }
 
