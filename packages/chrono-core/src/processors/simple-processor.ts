@@ -12,7 +12,7 @@ const DEFAULT_CLAIM_INTERVAL_MS = 50;
 const DEFAULT_CLAIM_STALE_TIMEOUT_MS = 10_000;
 const DEFAULT_IDLE_INTERVAL_MS = 5_000;
 const DEFAULT_TASK_HANDLER_TIMEOUT_MS = 5_000;
-const DEFAULT_TASK_HANDLER_MAX_RETRIES = 10;
+const DEFAULT_TASK_HANDLER_MAX_CLAIM_ATTEMPTS = 10;
 
 type SimpleProcessorConfig<
   TaskKind extends keyof TaskMapping,
@@ -69,7 +69,7 @@ export class SimpleProcessor<
     this.claimStaleTimeoutMs = config.claimStaleTimeoutMs || DEFAULT_CLAIM_STALE_TIMEOUT_MS;
     this.idleIntervalMs = config.idleIntervalMs || DEFAULT_IDLE_INTERVAL_MS;
     this.taskHandlerTimeoutMs = config.taskHandlerTimeoutMs || DEFAULT_TASK_HANDLER_TIMEOUT_MS;
-    this.taskHandlerMaxClaimAttempts = config.taskHandlerMaxClaimAttempts || DEFAULT_TASK_HANDLER_MAX_RETRIES;
+    this.taskHandlerMaxClaimAttempts = config.taskHandlerMaxClaimAttempts || DEFAULT_TASK_HANDLER_MAX_CLAIM_ATTEMPTS;
 
     this.validatedHandlerTimeout();
   }
