@@ -141,7 +141,7 @@ export class SimpleProcessor<
           continue;
         }
 
-        this.emit('task.claimed', { task, timestamp: new Date() });
+        this.emit('task:claimed', { task, timestamp: new Date() });
 
         // Process the task using the handler
         await this.handleTask(task);
@@ -149,7 +149,7 @@ export class SimpleProcessor<
         // Wait a bit before claiming the next task
         await setTimeout(this.claimIntervalMs);
       } catch (error) {
-        this.emit('processloop.error', { error });
+        this.emit('processloop:error', { error: error as Error, timestamp: new Date() });
       }
     }
 
@@ -184,7 +184,7 @@ export class SimpleProcessor<
       });
     } catch (error) {
       this.emit('task:completion:failed', {
-        error,
+        error: error as Error,
         task,
         timestamp: new Date(),
       });
