@@ -5,7 +5,7 @@ import type { BackoffStrategy } from '../backoff-strategy';
 import type { TaskMappingBase } from '../chrono';
 import type { Datastore, Task } from '../datastore';
 import { promiseWithTimeout } from '../utils/promise-utils';
-import type { Processor } from './processor';
+import type { Processor, ProcessorEvents } from './processor';
 
 const DEFAULT_MAX_CONCURRENCY = 1;
 const DEFAULT_CLAIM_INTERVAL_MS = 50;
@@ -36,8 +36,8 @@ export class SimpleProcessor<
     TaskMapping extends TaskMappingBase,
     DatastoreOptions,
   >
-  extends EventEmitter
-  implements Processor
+  extends EventEmitter<ProcessorEvents<TaskKind, TaskMapping>>
+  implements Processor<TaskKind, TaskMapping>
 {
   readonly taskKind: TaskKind;
   readonly datastore: Datastore<TaskMapping, DatastoreOptions>;
@@ -100,7 +100,7 @@ export class SimpleProcessor<
     }
 
     for (let i = 0; i < this.maxConcurrency; i++) {
-      const exitChannel = new EventEmitter();
+      const exitChannel = new EventEmitter<{ 'processloop:exit': [] }>();
 
       this.exitChannels.push(exitChannel);
       this.runProcessLoop(exitChannel);
@@ -126,7 +126,7 @@ export class SimpleProcessor<
    *
    * @param exitChannel The channel to signal when the loop exits.
    */
-  private async runProcessLoop(exitChannel: EventEmitter): Promise<void> {
+  private async runProcessLoop(exitChannel: EventEmitter<{ 'processloop:exit': [] }>): Promise<void> {
     while (!this.stopRequested) {
       try {
         const task = await this.datastore.claim({
@@ -153,7 +153,7 @@ export class SimpleProcessor<
       }
     }
 
-    exitChannel.emit('processloop.exit');
+    exitChannel.emit('processloop:exit');
   }
 
   /**
@@ -176,14 +176,14 @@ export class SimpleProcessor<
     }
 
     try {
-      const completedTask = await this.datastore.complete(task.id);
+      const completedTask = await this.datastore.complete<TaskKind>(task.id);
 
-      this.emit('task.completed', {
+      this.emit('task:completed', {
         task: completedTask,
-        timestamp: completedTask.completedAt,
+        timestamp: completedTask.completedAt || new Date(),
       });
     } catch (error) {
-      this.emit('task.complete.failed', {
+      this.emit('task:completion:failed', {
         error,
         task,
         timestamp: new Date(),
@@ -195,7 +195,7 @@ export class SimpleProcessor<
     if (task.retryCount >= this.taskHandlerMaxRetries) {
       // Mark the task as failed
       await this.datastore.fail(task.id);
-      this.emit('task.failed', {
+      this.emit('task:failed', {
         task,
         error,
         timestamp: new Date(),
@@ -208,7 +208,7 @@ export class SimpleProcessor<
     const nextScheduledAt = new Date(Date.now() + delay);
 
     await this.datastore.unclaim(task.id, nextScheduledAt);
-    this.emit('task.unclaimed', {
+    this.emit('task:unclaimed', {
       task,
       error,
       timestamp: new Date(),
