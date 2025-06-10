@@ -167,7 +167,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     return task ? this.toObject(task) : undefined;
   }
 
-  async unclaim<TaskKind extends keyof TaskMapping>(
+  async retryAt<TaskKind extends keyof TaskMapping>(
     taskId: string,
     nextScheduledAt: Date,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {

@@ -155,8 +155,8 @@ const chrono = new Chrono<TaskMapping, { collection: string }>(datastore);
 - `processloop.error` - Emits this event when an error occurs in the process loop (the process of claiming a task and processing it by calling the given handler).
 
 **Task related events**
-- `task.claimed` - Emits this event when a task is claimed.
-- `task.completed` - Emits this event when a task is successfully processed.
-- `task.complete.failed` -  Emits this event when the task fails to mark as completed.
-- `task.unclaimed` - Emits this event when the processor receives an error from the given task handler and the task will be retried.
-- `task.failed` - Emits this event when the processor receives an error from the given task handler and the max retries is reached.
+- `task:claimed` - Emits this event when a task is claimed.
+- `task:completed` - Emits this event when a task is successfully processed.
+- `task:completion:failed` -  Emits this event when the task fails to mark as completed.
+- `task:retry:requested` - Emits this event when the processor receives an error from the given task handler and the task will be retried.
+- `task:failed` - Emits this event when the processor receives an error from the given task handler and the max retries is reached.

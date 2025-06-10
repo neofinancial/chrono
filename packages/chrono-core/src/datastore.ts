@@ -75,7 +75,7 @@ export interface Datastore<TaskMapping extends TaskMappingBase, DatastoreOptions
   claim<TaskKind extends Extract<keyof TaskMapping, string>>(
     input: ClaimTaskInput<TaskKind>,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined>;
-  unclaim<TaskKind extends keyof TaskMapping>(
+  retryAt<TaskKind extends keyof TaskMapping>(
     taskId: string,
     nextScheduledAt: Date,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;

@@ -130,12 +130,12 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
   }
 
   /**
-   * Unclaims a task and returns it. Primarily used for retrying tasks.
+   * Schedules a task to be retried and returns it.
    *
-   * @param taskId The ID of the task to unclaim.
-   * @returns The unclaimed task.
+   * @param taskId The ID of the task to retry.
+   * @returns The task to retry.
    */
-  async unclaim<TaskKind extends keyof TaskMapping>(
+  async retryAt<TaskKind extends keyof TaskMapping>(
     taskId: string,
     nextScheduledAt: Date,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {

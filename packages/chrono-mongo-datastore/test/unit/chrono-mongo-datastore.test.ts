@@ -282,8 +282,8 @@ describe('ChronoMongoDatastore', () => {
     });
   });
 
-  describe('unclaim', () => {
-    test('should unclaim task', async () => {
+  describe('retryAt', () => {
+    test('should retry task', async () => {
       const firstScheduleDate = faker.date.past();
       const secondScheduleDate = faker.date.past();
 
@@ -303,7 +303,7 @@ describe('ChronoMongoDatastore', () => {
         }),
       );
 
-      const unclaimedTask = await dataStore.unclaim(task.id, secondScheduleDate);
+      const taskToRetry = await dataStore.retryAt(task.id, secondScheduleDate);
       const taskDocument = await collection.findOne({
         _id: new ObjectId(task.id),
       });
@@ -317,7 +317,7 @@ describe('ChronoMongoDatastore', () => {
           retryCount: 1,
         }),
       );
-      expect(unclaimedTask).toEqual(
+      expect(taskToRetry).toEqual(
         expect.objectContaining({
           id: task.id,
           kind: task.kind,
