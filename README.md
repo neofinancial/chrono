@@ -1,6 +1,7 @@
 # Chrono
 
-This project is pre-alpha, and not ready for production use. 
+⚠️ This project is pre-alpha, and not ready for production use. ⚠️
+
 A TypeScript task scheduling and processing system for reliable background job processing.
 
 Chrono is a monorepo containing `@neofinancial/chrono` built in datastore implementations.
