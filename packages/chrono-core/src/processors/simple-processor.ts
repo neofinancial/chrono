@@ -103,14 +103,7 @@ export class SimpleProcessor<
       const exitChannel = new EventEmitter<{ 'processloop:exit': [] }>();
 
       this.exitChannels.push(exitChannel);
-
-      const errorHandler = (error: Error) => {
-        // this.emit('processloop.error', { error });
-
-        this.runProcessLoop(exitChannel).catch(errorHandler);
-      };
-
-      this.runProcessLoop(exitChannel).catch(errorHandler);
+      this.runProcessLoop(exitChannel);
     }
   }
 
@@ -135,25 +128,29 @@ export class SimpleProcessor<
    */
   private async runProcessLoop(exitChannel: EventEmitter<{ 'processloop:exit': [] }>): Promise<void> {
     while (!this.stopRequested) {
-      const task = await this.datastore.claim({
-        kind: this.taskKind,
-        claimStaleTimeoutMs: this.claimStaleTimeoutMs,
-      });
+      try {
+        const task = await this.datastore.claim({
+          kind: this.taskKind,
+          claimStaleTimeoutMs: this.claimStaleTimeoutMs,
+        });
 
-      // If no tasks are available, wait before trying again
-      if (!task) {
-        await setTimeout(this.idleIntervalMs);
+        // If no tasks are available, wait before trying again
+        if (!task) {
+          await setTimeout(this.idleIntervalMs);
 
-        continue;
+          continue;
+        }
+
+        this.emit('task:claimed', { task, timestamp: new Date() });
+
+        // Process the task using the handler
+        await this.handleTask(task);
+
+        // Wait a bit before claiming the next task
+        await setTimeout(this.claimIntervalMs);
+      } catch (error) {
+        this.emit('processloop:error', { error: error as Error, timestamp: new Date() });
       }
-
-      this.emit('task:claimed', { task, timestamp: new Date() });
-
-      // Process the task using the handler
-      await this.handleTask(task);
-
-      // Wait a bit before claiming the next task
-      await setTimeout(this.claimIntervalMs);
     }
 
     exitChannel.emit('processloop:exit');
@@ -187,7 +184,7 @@ export class SimpleProcessor<
       });
     } catch (error) {
       this.emit('task:completion:failed', {
-        error,
+        error: error as Error,
         task,
         timestamp: new Date(),
       });
