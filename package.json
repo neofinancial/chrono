@@ -8,6 +8,7 @@
   "keywords": [],
   "author": "Neo Financial Engineering <engineering@neofinancial.com>",
   "license": "MIT",
+  "private": true,
   "packageManager": "pnpm@10.6.5",
   "scripts": {
     "clean": "pnpm --recursive run clean",
