@@ -4,6 +4,7 @@ on:
   pull_request:
     types: ["opened", "reopened", "synchronize"]
 
+
 env:
   NODE_VERSION: 20
 
@@ -24,8 +25,13 @@ jobs:
       - name: Cache Package Node Modules
         uses: actions/cache@v4
         with:
-          cache: pnpm
-          node-version: ${{ env.NODE_VERSION }}
+          path: |
+            ~/.pnpm-store
+            node_modules
+            packages/*/node_modules
+          key: pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-
 
       - name: Install
         run: |
