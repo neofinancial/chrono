@@ -6,6 +6,7 @@
     "pnpm": ">=10.6.2"
   },
   "keywords": [],
+  "version": "0.1.0",
   "author": "Neo Financial Engineering <engineering@neofinancial.com>",
   "license": "MIT",
   "private": true,
