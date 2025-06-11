@@ -1,7 +1,11 @@
 {
-  "name": "@neofinancial/chrono-core",
-  "version": "1.0.0",
+  "name": "@neofinancial/chrono",
+  "version": "0.1.0",
   "description": "",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "files": ["build/**"],

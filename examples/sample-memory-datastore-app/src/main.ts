@@ -1,4 +1,4 @@
-import { Chrono } from '@neofinancial/chrono-core';
+import { Chrono } from '@neofinancial/chrono';
 import { ChronoMemoryDatastore } from '@neofinancial/chrono-memory-datastore';
 
 type DatastoreOptions = undefined;
