@@ -1,12 +1,13 @@
 import {
   type ClaimTaskInput,
   type Datastore,
+  type DeleteInput,
+  type DeleteOptions,
   type ScheduleInput,
   type Task,
   type TaskMappingBase,
   TaskStatus,
 } from '@neofinancial/chrono';
-import type { DeleteInput, DeleteOptions } from '@neofinancial/chrono';
 
 export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDatastoreOptions>
   implements Datastore<TaskMapping, MemoryDatastoreOptions>
