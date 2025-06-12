@@ -169,14 +169,14 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     return task ? this.toObject(task) : undefined;
   }
 
-  async unclaim<TaskKind extends keyof TaskMapping>(
+  async retry<TaskKind extends keyof TaskMapping>(
     taskId: string,
-    nextScheduledAt: Date,
+    retryAt: Date,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
     const taskDocument = await this.updateOrThrow<TaskKind>(taskId, {
       $set: {
         status: TaskStatus.PENDING,
-        scheduledAt: nextScheduledAt,
+        scheduledAt: retryAt,
       },
       $inc: {
         retryCount: 1,

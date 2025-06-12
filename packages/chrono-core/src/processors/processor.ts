@@ -5,7 +5,7 @@ export type ProcessorEvents<TaskKind extends keyof TaskMapping, TaskMapping exte
   'task:claimed': [{ task: Task<TaskKind, TaskMapping[TaskKind]>; timestamp: Date }];
   'task:completed': [{ task: Task<TaskKind, TaskMapping[TaskKind]>; timestamp: Date }];
   'task:failed': [{ task: Task<TaskKind, TaskMapping[TaskKind]>; error: Error; timestamp: Date }];
-  'task:unclaimed': [{ task: Task<TaskKind, TaskMapping[TaskKind]>; error: Error; timestamp: Date }];
+  'task:retry:requested': [{ task: Task<TaskKind, TaskMapping[TaskKind]>; error: Error; timestamp: Date }];
   'task:completion:failed': [{ task: Task<TaskKind, TaskMapping[TaskKind]>; error: Error; timestamp: Date }];
   'processloop:error': [{ error: Error; timestamp: Date }];
 };
