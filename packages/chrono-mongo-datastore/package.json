@@ -1,7 +1,11 @@
 {
   "name": "@neofinancial/chrono-mongo-datastore",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "keywords": [],
@@ -14,14 +18,13 @@
     "typecheck": "tsc -p ./tsconfig.json --noEmit",
     "test": "NODE_ENV=test TZ=UTC vitest run"
   },
-  "dependencies": {
-    "@neofinancial/chrono-core": "workspace:*"
-  },
   "devDependencies": {
     "mongodb": "^6.15",
-    "mongodb-memory-server": "^10.1.4"
+    "mongodb-memory-server": "^10.1.4",
+    "@neofinancial/chrono": "workspace:*"
   },
   "peerDependencies": {
-    "mongodb": "^6.15"
+    "mongodb": "^6.15",
+    "@neofinancial/chrono": "workspace:*"
   }
 }

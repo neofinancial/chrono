@@ -38,7 +38,7 @@ importers:
 
   examples/sample-memory-datastore-app:
     dependencies:
-      '@neofinancial/chrono-core':
+      '@neofinancial/chrono':
         specifier: workspace:*
         version: link:../../packages/chrono-core
       '@neofinancial/chrono-memory-datastore':
@@ -49,16 +49,15 @@ importers:
 
   packages/chrono-memory-datastore:
     dependencies:
-      '@neofinancial/chrono-core':
+      '@neofinancial/chrono':
         specifier: workspace:*
         version: link:../chrono-core
 
   packages/chrono-mongo-datastore:
-    dependencies:
-      '@neofinancial/chrono-core':
+    devDependencies:
+      '@neofinancial/chrono':
         specifier: workspace:*
         version: link:../chrono-core
-    devDependencies:
       mongodb:
         specifier: ^6.15
         version: 6.15.0

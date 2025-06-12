@@ -8,6 +8,7 @@
   "keywords": [],
   "author": "Neo Financial Engineering <engineering@neofinancial.com>",
   "license": "MIT",
+  "private": true,
   "packageManager": "pnpm@10.6.5",
   "scripts": {
     "clean": "pnpm --recursive run clean",
@@ -17,7 +18,8 @@
     "format": "biome format --write",
     "lint": "biome lint",
     "prepare": "husky",
-    "test": "pnpm --recursive run test"
+    "test": "pnpm --recursive run test",
+    "publish": "pnpm publish -r"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",

@@ -1,5 +1,5 @@
 import { faker } from '@faker-js/faker';
-import { TaskStatus } from '@neofinancial/chrono-core';
+import { TaskStatus } from '@neofinancial/chrono';
 import { type Collection, MongoClient, ObjectId } from 'mongodb';
 import { afterAll, beforeAll, beforeEach, describe, expect, test, vitest } from 'vitest';
 

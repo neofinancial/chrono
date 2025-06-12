@@ -1,11 +1,13 @@
 import {
+  type ClaimTaskInput,
   type Datastore,
+  type DeleteInput,
+  type DeleteOptions,
   type ScheduleInput,
   type Task,
   type TaskMappingBase,
   TaskStatus,
-} from '@neofinancial/chrono-core';
-import type { ClaimTaskInput, DeleteInput, DeleteOptions } from '@neofinancial/chrono-core/build/datastore';
+} from '@neofinancial/chrono';
 import {
   type ClientSession,
   type Collection,
