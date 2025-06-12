@@ -113,7 +113,7 @@ export class SimpleProcessor<
    */
   async stop(): Promise<void> {
     const exitPromises = this.exitChannels.map(
-      (channel) => new Promise((resolve) => channel.once('processloop.exit', resolve)),
+      (channel) => new Promise((resolve) => channel.once('processloop:exit', resolve)),
     );
 
     this.stopRequested = true;
