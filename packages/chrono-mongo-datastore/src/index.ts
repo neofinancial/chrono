@@ -1,1 +1,5 @@
-export { ChronoMongoDatastore, type MongoDatastoreOptions } from './chrono-mongo-datastore';
+export {
+  ChronoMongoDatastore,
+  type MongoDatastoreOptions,
+  type ChronoMongoDatastoreConfig,
+} from './chrono-mongo-datastore';

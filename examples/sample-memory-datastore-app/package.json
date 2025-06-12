@@ -4,6 +4,7 @@
   "description": "Sample app that uses the chrono memory datastore",
   "main": "build/main.js",
   "files": ["build/**"],
+  "private": true,
   "keywords": [],
   "author": "Neo Financial Engineering <engineering@neofinancial.com>",
   "license": "MIT",
@@ -13,7 +14,7 @@
     "typecheck": "tsc -p ./tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@neofinancial/chrono-core": "workspace:*",
+    "@neofinancial/chrono": "workspace:*",
     "@neofinancial/chrono-memory-datastore": "workspace:*"
   }
 }

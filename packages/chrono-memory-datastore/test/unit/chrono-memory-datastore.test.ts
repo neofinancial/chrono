@@ -1,4 +1,4 @@
-import { TaskStatus } from '@neofinancial/chrono-core';
+import { TaskStatus } from '@neofinancial/chrono';
 import { beforeEach, describe, expect, test } from 'vitest';
 
 import { ChronoMemoryDatastore } from '../../src/chrono-memory-datastore';
