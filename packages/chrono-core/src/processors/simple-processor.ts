@@ -205,9 +205,9 @@ export class SimpleProcessor<
     }
 
     const delay = this.backOffStrategy({ retryAttempt: task.retryCount });
-    const nextScheduledAt = new Date(Date.now() + delay);
+    const retryAt = new Date(Date.now() + delay);
 
-    await this.datastore.retryAt(task.id, nextScheduledAt);
+    await this.datastore.retry(task.id, retryAt);
     this.emit('task:retry:requested', {
       task,
       error,

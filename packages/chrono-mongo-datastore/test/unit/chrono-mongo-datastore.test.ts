@@ -303,7 +303,7 @@ describe('ChronoMongoDatastore', () => {
         }),
       );
 
-      const taskToRetry = await dataStore.retryAt(task.id, secondScheduleDate);
+      const taskToRetry = await dataStore.retry(task.id, secondScheduleDate);
       const taskDocument = await collection.findOne({
         _id: new ObjectId(task.id),
       });

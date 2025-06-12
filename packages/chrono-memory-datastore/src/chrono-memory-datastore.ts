@@ -135,9 +135,9 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
    * @param taskId The ID of the task to retry.
    * @returns The task to retry.
    */
-  async retryAt<TaskKind extends keyof TaskMapping>(
+  async retry<TaskKind extends keyof TaskMapping>(
     taskId: string,
-    nextScheduledAt: Date,
+    retryAt: Date,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
     const task = Array.from(this.store.values()).find(
       (t): t is Task<TaskKind, TaskMapping[TaskKind]> => t.id === taskId && t.status === TaskStatus.CLAIMED,
@@ -148,7 +148,7 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
       task.retryCount += 1;
       task.claimedAt = undefined;
       task.lastExecutedAt = new Date();
-      task.scheduledAt = nextScheduledAt;
+      task.scheduledAt = retryAt;
 
       return task;
     }

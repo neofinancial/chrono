@@ -180,7 +180,7 @@ describe('ChronoMemoryDatastore', () => {
 
       await memoryDatastore.delete(task.id, { force: true });
 
-      await expect(memoryDatastore.retryAt(task.id, new Date())).rejects.toThrow(`Task with id ${task.id} not found`);
+      await expect(memoryDatastore.retry(task.id, new Date())).rejects.toThrow(`Task with id ${task.id} not found`);
     });
 
     test('noops when force deleting a task that does not exist', async () => {
