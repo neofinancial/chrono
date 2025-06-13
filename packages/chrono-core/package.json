@@ -1,10 +1,15 @@
 {
   "name": "@neofinancial/chrono",
-  "version": "0.1.0",
-  "description": "",
+  "version": "0.1.1",
+  "description": "Core package for Chrono task scheduling system",
   "private": false,
   "publishConfig": {
     "access": "public"
+  },
+  "homepage": "https://github.com/neofinancial/chrono",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neofinancial/chrono.git"
   },
   "main": "build/index.js",
   "types": "build/index.d.ts",
