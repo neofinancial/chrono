@@ -7,28 +7,24 @@ import type { Datastore, Task } from '../datastore';
 import { promiseWithTimeout } from '../utils/promise-utils';
 import type { Processor, ProcessorEvents } from './processor';
 
-const DEFAULT_MAX_CONCURRENCY = 1;
-const DEFAULT_CLAIM_INTERVAL_MS = 50;
-const DEFAULT_CLAIM_STALE_TIMEOUT_MS = 10_000;
-const DEFAULT_IDLE_INTERVAL_MS = 5_000;
-const DEFAULT_TASK_HANDLER_TIMEOUT_MS = 5_000;
-const DEFAULT_TASK_HANDLER_MAX_RETRIES = 10;
+const DEFAULT_CONFIG: SimpleProcessorConfig = {
+  maxConcurrency: 1,
+  claimIntervalMs: 50,
+  claimStaleTimeoutMs: 10_000,
+  idleIntervalMs: 5_000,
+  taskHandlerTimeoutMs: 5_000,
+  taskHandlerMaxRetries: 10,
+  processLoopRetryIntervalMs: 20_000,
+};
 
-type SimpleProcessorConfig<
-  TaskKind extends keyof TaskMapping,
-  TaskMapping extends TaskMappingBase,
-  DatastoreOptions,
-> = {
-  datastore: Datastore<TaskMapping, DatastoreOptions>;
-  kind: TaskKind;
-  handler: (task: Task<TaskKind, TaskMapping[TaskKind]>) => Promise<void>;
-  maxConcurrency?: number;
-  backoffStrategy: BackoffStrategy;
-  claimIntervalMs?: number;
-  claimStaleTimeoutMs?: number;
-  idleIntervalMs?: number;
-  taskHandlerTimeoutMs?: number;
-  taskHandlerMaxRetries?: number;
+type SimpleProcessorConfig = {
+  maxConcurrency: number;
+  claimIntervalMs: number;
+  claimStaleTimeoutMs: number;
+  idleIntervalMs: number;
+  taskHandlerTimeoutMs: number;
+  taskHandlerMaxRetries: number;
+  processLoopRetryIntervalMs: number;
 };
 
 export class SimpleProcessor<
@@ -39,37 +35,24 @@ export class SimpleProcessor<
   extends EventEmitter<ProcessorEvents<TaskKind, TaskMapping>>
   implements Processor<TaskKind, TaskMapping>
 {
-  readonly taskKind: TaskKind;
-  readonly datastore: Datastore<TaskMapping, DatastoreOptions>;
-  readonly handler: (task: Task<TaskKind, TaskMapping[TaskKind]>) => Promise<void>;
-
-  private maxConcurrency: number;
-  private backOffStrategy: BackoffStrategy;
-
-  readonly claimIntervalMs: number;
-  readonly claimStaleTimeoutMs: number;
-  readonly idleIntervalMs: number;
-
-  readonly taskHandlerTimeoutMs: number;
-  readonly taskHandlerMaxRetries: number;
+  private config: SimpleProcessorConfig;
 
   private exitChannels: EventEmitter[] = [];
   private stopRequested = false;
 
-  constructor(config: SimpleProcessorConfig<TaskKind, TaskMapping, DatastoreOptions>) {
+  constructor(
+    private datastore: Datastore<TaskMapping, DatastoreOptions>,
+    private taskKind: TaskKind,
+    private handler: (task: Task<TaskKind, TaskMapping[TaskKind]>) => Promise<void>,
+    private backOffStrategy: BackoffStrategy,
+    config?: Partial<SimpleProcessorConfig>,
+  ) {
     super();
 
-    this.datastore = config.datastore;
-    this.handler = config.handler;
-    this.taskKind = config.kind;
-    this.backOffStrategy = config.backoffStrategy;
-
-    this.maxConcurrency = config.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
-    this.claimIntervalMs = config.claimIntervalMs || DEFAULT_CLAIM_INTERVAL_MS;
-    this.claimStaleTimeoutMs = config.claimStaleTimeoutMs || DEFAULT_CLAIM_STALE_TIMEOUT_MS;
-    this.idleIntervalMs = config.idleIntervalMs || DEFAULT_IDLE_INTERVAL_MS;
-    this.taskHandlerTimeoutMs = config.taskHandlerTimeoutMs || DEFAULT_TASK_HANDLER_TIMEOUT_MS;
-    this.taskHandlerMaxRetries = config.taskHandlerMaxRetries || DEFAULT_TASK_HANDLER_MAX_RETRIES;
+    this.config = {
+      ...DEFAULT_CONFIG,
+      ...config,
+    };
 
     this.validatedHandlerTimeout();
   }
@@ -83,9 +66,9 @@ export class SimpleProcessor<
    * @throws {Error} If the task handler timeout is greater than or equal to the claim stale timeout.
    */
   private validatedHandlerTimeout() {
-    if (this.taskHandlerTimeoutMs >= this.claimStaleTimeoutMs) {
+    if (this.config.taskHandlerTimeoutMs >= this.config.claimStaleTimeoutMs) {
       throw new Error(
-        `Task handler timeout (${this.taskHandlerTimeoutMs}ms) must be less than the claim stale timeout (${this.claimStaleTimeoutMs}ms)`,
+        `Task handler timeout (${this.config.taskHandlerTimeoutMs}ms) must be less than the claim stale timeout (${this.config.claimStaleTimeoutMs}ms)`,
       );
     }
   }
@@ -99,7 +82,7 @@ export class SimpleProcessor<
       return;
     }
 
-    for (let i = 0; i < this.maxConcurrency; i++) {
+    for (let i = 0; i < this.config.maxConcurrency; i++) {
       const exitChannel = new EventEmitter<{ 'processloop:exit': [] }>();
 
       this.exitChannels.push(exitChannel);
@@ -131,12 +114,12 @@ export class SimpleProcessor<
       try {
         const task = await this.datastore.claim({
           kind: this.taskKind,
-          claimStaleTimeoutMs: this.claimStaleTimeoutMs,
+          claimStaleTimeoutMs: this.config.claimStaleTimeoutMs,
         });
 
         // If no tasks are available, wait before trying again
         if (!task) {
-          await setTimeout(this.idleIntervalMs);
+          await setTimeout(this.config.idleIntervalMs);
 
           continue;
         }
@@ -147,9 +130,11 @@ export class SimpleProcessor<
         await this.handleTask(task);
 
         // Wait a bit before claiming the next task
-        await setTimeout(this.claimIntervalMs);
+        await setTimeout(this.config.claimIntervalMs);
       } catch (error) {
         this.emit('processloop:error', { error: error as Error, timestamp: new Date() });
+
+        await setTimeout(this.config.processLoopRetryIntervalMs);
       }
     }
 
@@ -168,7 +153,7 @@ export class SimpleProcessor<
    */
   private async handleTask(task: Task<TaskKind, TaskMapping[TaskKind]>) {
     try {
-      await promiseWithTimeout(this.handler(task), this.taskHandlerTimeoutMs);
+      await promiseWithTimeout(this.handler(task), this.config.taskHandlerTimeoutMs);
     } catch (error) {
       await this.handleTaskError(task, error as Error);
 
@@ -192,7 +177,7 @@ export class SimpleProcessor<
   }
 
   private async handleTaskError(task: Task<TaskKind, TaskMapping[TaskKind]>, error: Error): Promise<void> {
-    if (task.retryCount >= this.taskHandlerMaxRetries) {
+    if (task.retryCount >= this.config.taskHandlerMaxRetries) {
       // Mark the task as failed
       await this.datastore.fail(task.id);
       this.emit('task:failed', {

@@ -11,6 +11,7 @@ export type ProcessorConfiguration = {
   idleIntervalMs?: number;
   taskHandlerTimeoutMs?: number;
   taskHandlerMaxRetries?: number;
+  processLoopRetryIntervalMs?: number;
 };
 
 export type CreateProcessorInput<
@@ -32,16 +33,11 @@ export function createProcessor<
 >(input: CreateProcessorInput<TaskKind, TaskMapping, DatastoreOptions>): Processor<TaskKind, TaskMapping> {
   const backoffStrategy = backoffStrategyFactory(input.backoffStrategyOptions);
   // add more processors here
-  return new SimpleProcessor<TaskKind, TaskMapping, DatastoreOptions>({
-    datastore: input.datastore,
-    kind: input.kind,
-    handler: input.handler,
-    maxConcurrency: input.configuration?.maxConcurrency,
+  return new SimpleProcessor<TaskKind, TaskMapping, DatastoreOptions>(
+    input.datastore,
+    input.kind,
+    input.handler,
     backoffStrategy,
-    claimIntervalMs: input.configuration?.claimIntervalMs,
-    idleIntervalMs: input.configuration?.idleIntervalMs,
-    taskHandlerTimeoutMs: input.configuration?.taskHandlerTimeoutMs,
-    claimStaleTimeoutMs: input.configuration?.claimStaleTimeoutMs,
-    taskHandlerMaxRetries: input.configuration?.taskHandlerMaxRetries,
-  });
+    input.configuration,
+  );
 }
