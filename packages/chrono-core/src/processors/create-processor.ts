@@ -11,6 +11,7 @@ export type ProcessorConfiguration = {
   idleIntervalMs?: number;
   taskHandlerTimeoutMs?: number;
   taskHandlerMaxRetries?: number;
+  processLoopErrorRetrySleepMs?: number;
 };
 
 export type CreateProcessorInput<
@@ -43,5 +44,6 @@ export function createProcessor<
     taskHandlerTimeoutMs: input.configuration?.taskHandlerTimeoutMs,
     claimStaleTimeoutMs: input.configuration?.claimStaleTimeoutMs,
     taskHandlerMaxRetries: input.configuration?.taskHandlerMaxRetries,
+    processLoopErrorRetrySleepMs: input.configuration?.processLoopErrorRetrySleepMs,
   });
 }

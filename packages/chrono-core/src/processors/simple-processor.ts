@@ -13,6 +13,7 @@ const DEFAULT_CLAIM_STALE_TIMEOUT_MS = 10_000;
 const DEFAULT_IDLE_INTERVAL_MS = 5_000;
 const DEFAULT_TASK_HANDLER_TIMEOUT_MS = 5_000;
 const DEFAULT_TASK_HANDLER_MAX_RETRIES = 10;
+const DEFAULT_PROCESS_LOOP_RETRY_SLEEP_MS = 20_000;
 
 type SimpleProcessorConfig<
   TaskKind extends keyof TaskMapping,
@@ -29,6 +30,7 @@ type SimpleProcessorConfig<
   idleIntervalMs?: number;
   taskHandlerTimeoutMs?: number;
   taskHandlerMaxRetries?: number;
+  processLoopErrorRetrySleepMs?: number;
 };
 
 export class SimpleProcessor<
@@ -53,6 +55,8 @@ export class SimpleProcessor<
   readonly taskHandlerTimeoutMs: number;
   readonly taskHandlerMaxRetries: number;
 
+  readonly processLoopErrorRetrySleepMs: number;
+
   private exitChannels: EventEmitter[] = [];
   private stopRequested = false;
 
@@ -70,6 +74,7 @@ export class SimpleProcessor<
     this.idleIntervalMs = config.idleIntervalMs || DEFAULT_IDLE_INTERVAL_MS;
     this.taskHandlerTimeoutMs = config.taskHandlerTimeoutMs || DEFAULT_TASK_HANDLER_TIMEOUT_MS;
     this.taskHandlerMaxRetries = config.taskHandlerMaxRetries || DEFAULT_TASK_HANDLER_MAX_RETRIES;
+    this.processLoopErrorRetrySleepMs = config.processLoopErrorRetrySleepMs || DEFAULT_PROCESS_LOOP_RETRY_SLEEP_MS;
 
     this.validatedHandlerTimeout();
   }
@@ -150,6 +155,8 @@ export class SimpleProcessor<
         await setTimeout(this.claimIntervalMs);
       } catch (error) {
         this.emit('processloop:error', { error: error as Error, timestamp: new Date() });
+
+        await setTimeout(this.processLoopErrorRetrySleepMs);
       }
     }
 

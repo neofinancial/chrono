@@ -98,6 +98,7 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> exten
       datastore: this.datastore,
       handler: input.handler,
       configuration: input.processorConfiguration,
+      backoffStrategyOptions: input.backoffStrategyOptions,
     });
 
     this.processors.set(input.kind, processor);
