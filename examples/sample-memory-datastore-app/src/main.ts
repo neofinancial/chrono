@@ -16,7 +16,7 @@ async function main() {
     console.log('Chrono successfully started and polling tasks', startedAt);
   });
 
-  chrono.on(ChronoEvents.FORCIBLY_STOPPED, ({ error, timestamp }) => {
+  chrono.on(ChronoEvents.STOP_ABORTED, ({ error, timestamp }) => {
     console.error('Chrono failed to shutdown gracefully', timestamp, error);
   });
 

@@ -141,7 +141,7 @@ export class SimpleProcessor<
         // Wait a bit before claiming the next task
         await setTimeout(this.config.claimIntervalMs);
       } catch (error) {
-        this.emit(ProcessorEvents.UNKNOWN_PROCESS_ERROR, { error, timestamp: new Date() });
+        this.emit(ProcessorEvents.UNKNOWN_PROCESSING_ERROR, { error, timestamp: new Date() });
 
         await setTimeout(this.config.processLoopRetryIntervalMs);
       }
@@ -203,7 +203,7 @@ export class SimpleProcessor<
     const retryAt = new Date(Date.now() + delay);
 
     await this.datastore.retry(task.id, retryAt);
-    this.emit(ProcessorEvents.TASK_RETRY, {
+    this.emit(ProcessorEvents.TASK_RETRY_SCHEDULED, {
       task,
       error,
       errorAt: failedAt,
