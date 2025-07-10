@@ -1,5 +1,5 @@
 export { Chrono, type ScheduleTaskInput, type TaskMappingBase } from './chrono';
-export * from './events';
+export { ChronoEvents } from './events';
 export { ProcessorEvents } from './processors';
 
 export {

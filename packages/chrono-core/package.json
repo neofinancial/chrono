@@ -1,6 +1,6 @@
 {
   "name": "@neofinancial/chrono",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Core package for Chrono task scheduling system",
   "private": false,
   "publishConfig": {

@@ -1,6 +1,6 @@
 {
   "name": "@neofinancial/chrono-mongo-datastore",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "MongoDB datastore implementation for Chrono task scheduling system",
   "private": false,
   "publishConfig": {
@@ -24,12 +24,12 @@
     "test": "NODE_ENV=test TZ=UTC vitest run"
   },
   "devDependencies": {
-    "mongodb": "^6.15",
+    "mongodb": "^6",
     "mongodb-memory-server": "^10.1.4",
     "@neofinancial/chrono": "workspace:*"
   },
   "peerDependencies": {
-    "mongodb": "^6.15",
+    "mongodb": "^6",
     "@neofinancial/chrono": "workspace:*"
   }
 }
