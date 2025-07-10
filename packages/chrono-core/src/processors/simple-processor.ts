@@ -5,7 +5,8 @@ import type { BackoffStrategy } from '../backoff-strategy';
 import type { TaskMappingBase } from '../chrono';
 import type { Datastore, Task } from '../datastore';
 import { promiseWithTimeout } from '../utils/promise-utils';
-import type { Processor, ProcessorEvents } from './processor';
+import { ProcessorEvents, type ProcessorEventsMap } from './events';
+import type { Processor } from './processor';
 
 const DEFAULT_CONFIG: SimpleProcessorConfig = {
   maxConcurrency: 1,
@@ -27,17 +28,24 @@ type SimpleProcessorConfig = {
   processLoopRetryIntervalMs: number;
 };
 
+const InternalProcessorEvents = { PROCESSOR_LOOP_EXIT: 'processorLoopExit' } as const;
+type InternalProcessorEvents = (typeof InternalProcessorEvents)[keyof typeof InternalProcessorEvents];
+
+type InternalProcessorEventsMap = {
+  [InternalProcessorEvents.PROCESSOR_LOOP_EXIT]: [];
+};
+
 export class SimpleProcessor<
     TaskKind extends Extract<keyof TaskMapping, string>,
     TaskMapping extends TaskMappingBase,
     DatastoreOptions,
   >
-  extends EventEmitter<ProcessorEvents<TaskKind, TaskMapping>>
+  extends EventEmitter<ProcessorEventsMap<TaskKind, TaskMapping>>
   implements Processor<TaskKind, TaskMapping>
 {
   private config: SimpleProcessorConfig;
 
-  private exitChannels: EventEmitter[] = [];
+  private exitChannels: EventEmitter<InternalProcessorEventsMap>[] = [];
   private stopRequested = false;
 
   constructor(
@@ -83,7 +91,7 @@ export class SimpleProcessor<
     }
 
     for (let i = 0; i < this.config.maxConcurrency; i++) {
-      const exitChannel = new EventEmitter<{ 'processloop:exit': [] }>();
+      const exitChannel = new EventEmitter<InternalProcessorEventsMap>();
 
       this.exitChannels.push(exitChannel);
       this.runProcessLoop(exitChannel);
@@ -96,7 +104,8 @@ export class SimpleProcessor<
    */
   async stop(): Promise<void> {
     const exitPromises = this.exitChannels.map(
-      (channel) => new Promise((resolve) => channel.once('processloop:exit', resolve)),
+      (channel) =>
+        new Promise((resolve) => channel.once(InternalProcessorEvents.PROCESSOR_LOOP_EXIT, () => resolve(null))),
     );
 
     this.stopRequested = true;
@@ -109,7 +118,7 @@ export class SimpleProcessor<
    *
    * @param exitChannel The channel to signal when the loop exits.
    */
-  private async runProcessLoop(exitChannel: EventEmitter<{ 'processloop:exit': [] }>): Promise<void> {
+  private async runProcessLoop(exitChannel: EventEmitter<InternalProcessorEventsMap>): Promise<void> {
     while (!this.stopRequested) {
       try {
         const task = await this.datastore.claim({
@@ -124,7 +133,7 @@ export class SimpleProcessor<
           continue;
         }
 
-        this.emit('task:claimed', { task, timestamp: new Date() });
+        this.emit(ProcessorEvents.TASK_CLAIMED, { task, claimedAt: task.claimedAt || new Date() });
 
         // Process the task using the handler
         await this.handleTask(task);
@@ -132,13 +141,13 @@ export class SimpleProcessor<
         // Wait a bit before claiming the next task
         await setTimeout(this.config.claimIntervalMs);
       } catch (error) {
-        this.emit('processloop:error', { error: error as Error, timestamp: new Date() });
+        this.emit(ProcessorEvents.UNKNOWN_PROCESS_ERROR, { error, timestamp: new Date() });
 
         await setTimeout(this.config.processLoopRetryIntervalMs);
       }
     }
 
-    exitChannel.emit('processloop:exit');
+    exitChannel.emit(InternalProcessorEvents.PROCESSOR_LOOP_EXIT);
   }
 
   /**
@@ -163,27 +172,28 @@ export class SimpleProcessor<
     try {
       const completedTask = await this.datastore.complete<TaskKind>(task.id);
 
-      this.emit('task:completed', {
+      this.emit(ProcessorEvents.TASK_COMPLETED, {
         task: completedTask,
-        timestamp: completedTask.completedAt || new Date(),
+        completedAt: completedTask.completedAt || new Date(),
       });
     } catch (error) {
-      this.emit('task:completion:failed', {
-        error: error as Error,
+      this.emit(ProcessorEvents.TASK_COMPLETION_FAILURE, {
+        error: error,
+        failedAt: new Date(),
         task,
-        timestamp: new Date(),
       });
     }
   }
 
   private async handleTaskError(task: Task<TaskKind, TaskMapping[TaskKind]>, error: Error): Promise<void> {
+    const failedAt = new Date();
     if (task.retryCount >= this.config.taskHandlerMaxRetries) {
       // Mark the task as failed
       await this.datastore.fail(task.id);
-      this.emit('task:failed', {
+      this.emit(ProcessorEvents.TASK_FAILED, {
         task,
         error,
-        timestamp: new Date(),
+        failedAt,
       });
 
       return;
@@ -193,10 +203,11 @@ export class SimpleProcessor<
     const retryAt = new Date(Date.now() + delay);
 
     await this.datastore.retry(task.id, retryAt);
-    this.emit('task:retry:requested', {
+    this.emit(ProcessorEvents.TASK_RETRY, {
       task,
       error,
-      timestamp: new Date(),
+      errorAt: failedAt,
+      retryScheduledAt: retryAt,
     });
   }
 }

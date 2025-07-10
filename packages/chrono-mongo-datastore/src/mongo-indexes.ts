@@ -1,7 +1,7 @@
 import { TaskStatus } from '@neofinancial/chrono';
 import type { Collection } from 'mongodb';
 
-export const DEFAULT_COMPLETED_DOCUMENT_TTL = 60 * 60 * 24 * 30; // 30 days
+export const DEFAULT_EXPIRY_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
 export const IndexNames = {
   COMPLETED_DOCUMENT_TTL_INDEX: 'chrono-completed-document-ttl-index',
@@ -10,7 +10,7 @@ export const IndexNames = {
 };
 
 export type IndexDefinitionOptions = {
-  completedDocumentTTL?: number;
+  expireAfterSeconds?: number;
 };
 
 export async function ensureIndexes(collection: Collection, options: IndexDefinitionOptions): Promise<void> {
@@ -21,7 +21,7 @@ export async function ensureIndexes(collection: Collection, options: IndexDefini
         completedAt: { $exists: true },
         status: { $eq: TaskStatus.COMPLETED },
       },
-      expireAfterSeconds: options.completedDocumentTTL || DEFAULT_COMPLETED_DOCUMENT_TTL,
+      expireAfterSeconds: options.expireAfterSeconds || DEFAULT_EXPIRY_SECONDS,
       name: IndexNames.COMPLETED_DOCUMENT_TTL_INDEX,
     },
   );
