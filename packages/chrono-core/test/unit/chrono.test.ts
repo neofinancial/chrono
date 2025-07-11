@@ -39,21 +39,8 @@ describe('Chrono', () => {
       await chrono.start();
 
       expect(emitSpy).toHaveBeenCalledOnce();
-      expect(emitSpy).toHaveBeenCalledWith('ready', {
-        timestamp: expect.any(Date),
-      });
-    });
-  });
-
-  describe('stop', () => {
-    test('emits close event when chrono is stopped successfully', async () => {
-      const emitSpy = vitest.spyOn(chrono, 'emit');
-
-      await chrono.stop();
-
-      expect(emitSpy).toHaveBeenCalledOnce();
-      expect(emitSpy).toHaveBeenCalledWith('close', {
-        timestamp: expect.any(Date),
+      expect(emitSpy).toHaveBeenCalledWith('started', {
+        startedAt: expect.any(Date),
       });
     });
   });

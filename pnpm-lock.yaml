@@ -59,7 +59,7 @@ importers:
         specifier: workspace:*
         version: link:../chrono-core
       mongodb:
-        specifier: ^6.15
+        specifier: ^6
         version: 6.15.0
       mongodb-memory-server:
         specifier: ^10.1.4

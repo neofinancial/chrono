@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:stream';
 
 import type { BackoffStrategyOptions } from './backoff-strategy';
 import type { Datastore, ScheduleInput, Task } from './datastore';
+import { ChronoEvents, type ChronoEventsMap } from './events';
 import { type Processor, createProcessor } from './processors';
 import type { ProcessorConfiguration } from './processors/create-processor';
 import { promiseWithTimeout } from './utils/promise-utils';
@@ -33,7 +34,7 @@ export type RegisterTaskHandlerInput<TaskKind, TaskData> = {
  *
  */
 
-export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> extends EventEmitter {
+export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> extends EventEmitter<ChronoEventsMap> {
   private datastore: Datastore<TaskMapping, DatastoreOptions>;
   private processors: Map<keyof TaskMapping, Processor<keyof TaskMapping, TaskMapping>> = new Map();
 
@@ -50,7 +51,7 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> exten
       await processor.start();
     }
 
-    this.emit('ready', { timestamp: new Date() });
+    this.emit(ChronoEvents.STARTED, { startedAt: new Date() });
   }
 
   public async stop(): Promise<void> {
@@ -59,9 +60,7 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> exten
     try {
       await promiseWithTimeout(Promise.all(stopPromises), this.exitTimeoutMs);
     } catch (error) {
-      this.emit('stop:failed', { error, timestamp: new Date() });
-    } finally {
-      this.emit('close', { timestamp: new Date() });
+      this.emit(ChronoEvents.STOP_ABORTED, { error, timestamp: new Date() });
     }
   }
 

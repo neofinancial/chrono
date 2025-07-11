@@ -22,7 +22,19 @@ import { IndexNames, ensureIndexes } from './mongo-indexes';
 const DEFAULT_COLLECTION_NAME = 'chrono-tasks';
 
 export type ChronoMongoDatastoreConfig = {
-  completedDocumentTTL?: number;
+  /**
+   * The TTL (in seconds) for completed documents.
+   *
+   * @default 60 * 60 * 24 * 30 // 30 days
+   * @type {number}
+   */
+  completedDocumentTTLSeconds?: number;
+
+  /**
+   * The name of the collection to use for the datastore.
+   *
+   * @type {string}
+   */
   collectionName: string;
 };
 
@@ -41,7 +53,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
   private constructor(database: Db, config?: Partial<ChronoMongoDatastoreConfig>) {
     this.database = database;
     this.config = {
-      completedDocumentTTL: config?.completedDocumentTTL,
+      completedDocumentTTLSeconds: config?.completedDocumentTTLSeconds,
       collectionName: config?.collectionName || DEFAULT_COLLECTION_NAME,
     };
   }
@@ -53,7 +65,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     const datastore = new ChronoMongoDatastore<TaskMapping>(database, config);
 
     await ensureIndexes(datastore.database.collection(datastore.config.collectionName), {
-      completedDocumentTTL: datastore.config.completedDocumentTTL,
+      expireAfterSeconds: datastore.config.completedDocumentTTLSeconds,
     });
 
     return datastore;
