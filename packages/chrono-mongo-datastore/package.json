@@ -1,6 +1,6 @@
 {
   "name": "@neofinancial/chrono-mongo-datastore",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "MongoDB datastore implementation for Chrono task scheduling system",
   "private": false,
   "publishConfig": {
