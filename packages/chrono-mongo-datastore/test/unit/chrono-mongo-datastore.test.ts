@@ -41,6 +41,13 @@ describe('ChronoMongoDatastore', () => {
     await mongoClient.close();
   });
 
+  describe('setDatabase', () => {
+    test('should throw an error if the database connection is already set', async () => {
+      await expect(() => dataStore.setDatabase(mongoClient.db(DB_NAME))).rejects.toThrow(
+        'Database connection already set',
+      );
+    });
+  });
   describe('schedule', () => {
     describe('when called with valid input', () => {
       const input = {

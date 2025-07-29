@@ -59,11 +59,15 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
   }
 
   /**
-   * Sets the database for the datastore. Ensures that the indexes are created and resolves any pending promises waiting for the database.
+   * Sets the database connection for the datastore. Ensures that the indexes are created and resolves any pending promises waiting for the database.
    *
    * @param database - The database to set.
    */
   async setDatabase(database: Db) {
+    if (this.database) {
+      throw new Error('Database connection already set');
+    }
+
     this.database = database;
 
     await ensureIndexes(database.collection(this.config.collectionName), {
