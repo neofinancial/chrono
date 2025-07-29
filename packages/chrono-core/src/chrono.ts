@@ -5,6 +5,7 @@ import type { Datastore, ScheduleInput, Task } from './datastore';
 import { ChronoEvents, type ChronoEventsMap } from './events';
 import { type Processor, createProcessor } from './processors';
 import type { ProcessorConfiguration } from './processors/create-processor';
+import type { ProcessorEventsMap } from './processors/events';
 import { promiseWithTimeout } from './utils/promise-utils';
 
 export type TaskMappingBase = Record<string, unknown>;
@@ -22,6 +23,11 @@ export type RegisterTaskHandlerInput<TaskKind, TaskData> = {
   processorConfiguration?: ProcessorConfiguration;
 };
 
+export type RegisterTaskHandlerResponse<
+  TaskKind extends keyof TaskMapping,
+  TaskMapping extends TaskMappingBase,
+> = EventEmitter<ProcessorEventsMap<TaskKind, TaskMapping>>;
+
 /**
  * This is a type that represents the mapping of task kinds to their respective data types.
  *
@@ -35,8 +41,8 @@ export type RegisterTaskHandlerInput<TaskKind, TaskData> = {
  */
 
 export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> extends EventEmitter<ChronoEventsMap> {
-  private datastore: Datastore<TaskMapping, DatastoreOptions>;
-  private processors: Map<keyof TaskMapping, Processor<keyof TaskMapping, TaskMapping>> = new Map();
+  private readonly datastore: Datastore<TaskMapping, DatastoreOptions>;
+  private readonly processors: Map<keyof TaskMapping, Processor<keyof TaskMapping, TaskMapping>> = new Map();
 
   readonly exitTimeoutMs = 60_000;
 
@@ -87,7 +93,7 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> exten
 
   public registerTaskHandler<TaskKind extends Extract<keyof TaskMapping, string>>(
     input: RegisterTaskHandlerInput<TaskKind, TaskMapping[TaskKind]>,
-  ): Processor<TaskKind, TaskMapping> {
+  ): RegisterTaskHandlerResponse<TaskKind, TaskMapping> {
     if (this.processors.has(input.kind)) {
       throw new Error('Handler for task kind already exists');
     }

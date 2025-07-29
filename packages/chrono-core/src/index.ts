@@ -1,4 +1,10 @@
-export { Chrono, type ScheduleTaskInput, type TaskMappingBase } from './chrono';
+export {
+  Chrono,
+  type ScheduleTaskInput,
+  type TaskMappingBase,
+  type RegisterTaskHandlerInput,
+  type RegisterTaskHandlerResponse,
+} from './chrono';
 export { ChronoEvents } from './events';
 export { ProcessorEvents } from './processors';
 

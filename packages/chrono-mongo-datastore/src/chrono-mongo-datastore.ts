@@ -48,10 +48,10 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
   implements Datastore<TaskMapping, MongoDatastoreOptions>
 {
   private config: ChronoMongoDatastoreConfig;
-  private database: Db;
+  private database: Promise<Db>;
 
-  private constructor(database: Db, config?: Partial<ChronoMongoDatastoreConfig>) {
-    this.database = database;
+  private constructor(database: () => Promise<Db>, config?: Partial<ChronoMongoDatastoreConfig>) {
+    this.database = database();
     this.config = {
       completedDocumentTTLSeconds: config?.completedDocumentTTLSeconds,
       collectionName: config?.collectionName || DEFAULT_COLLECTION_NAME,
@@ -85,8 +85,10 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
       retryCount: 0,
     };
 
+    const database = await this.database;
+
     try {
-      const results = await this.database.collection(this.config.collectionName).insertOne(createInput, {
+      const results = await database.collection(this.config.collectionName).insertOne(createInput, {
         ...(input?.datastoreOptions?.session ? { session: input.datastoreOptions.session } : undefined),
         ignoreUndefined: true,
       });
