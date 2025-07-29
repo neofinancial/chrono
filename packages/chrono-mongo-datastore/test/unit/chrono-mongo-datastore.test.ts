@@ -26,9 +26,11 @@ describe('ChronoMongoDatastore', () => {
 
     collection = mongoClient.db(DB_NAME).collection(TEST_DB_COLLECTION_NAME);
 
-    dataStore = await ChronoMongoDatastore.create(mongoClient.db(DB_NAME), {
+    dataStore = new ChronoMongoDatastore({
       collectionName: TEST_DB_COLLECTION_NAME,
     });
+
+    await dataStore.setDatabase(mongoClient.db(DB_NAME));
   });
 
   beforeEach(async () => {
