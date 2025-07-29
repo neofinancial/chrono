@@ -64,7 +64,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
   ): Promise<ChronoMongoDatastore<TaskMapping>> {
     const datastore = new ChronoMongoDatastore<TaskMapping>(database, config);
 
-    await ensureIndexes(datastore.database.collection(datastore.config.collectionName), {
+    await ensureIndexes(database.collection(datastore.config.collectionName), {
       expireAfterSeconds: datastore.config.completedDocumentTTLSeconds,
     });
 
