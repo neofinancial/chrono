@@ -48,10 +48,10 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
   implements Datastore<TaskMapping, MongoDatastoreOptions>
 {
   private config: ChronoMongoDatastoreConfig;
-  private database: Promise<Db>;
+  private database: Db;
 
-  private constructor(database: () => Promise<Db>, config?: Partial<ChronoMongoDatastoreConfig>) {
-    this.database = database();
+  private constructor(database: Db, config?: Partial<ChronoMongoDatastoreConfig>) {
+    this.database = database;
     this.config = {
       completedDocumentTTLSeconds: config?.completedDocumentTTLSeconds,
       collectionName: config?.collectionName || DEFAULT_COLLECTION_NAME,
@@ -64,7 +64,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
   ): Promise<ChronoMongoDatastore<TaskMapping>> {
     const datastore = new ChronoMongoDatastore<TaskMapping>(database, config);
 
-    await ensureIndexes(datastore.database.collection(datastore.config.collectionName), {
+    await ensureIndexes(database.collection(datastore.config.collectionName), {
       expireAfterSeconds: datastore.config.completedDocumentTTLSeconds,
     });
 
@@ -85,10 +85,8 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
       retryCount: 0,
     };
 
-    const database = await this.database;
-
     try {
-      const results = await database.collection(this.config.collectionName).insertOne(createInput, {
+      const results = await this.database.collection(this.config.collectionName).insertOne(createInput, {
         ...(input?.datastoreOptions?.session ? { session: input.datastoreOptions.session } : undefined),
         ignoreUndefined: true,
       });
