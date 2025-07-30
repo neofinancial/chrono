@@ -63,16 +63,16 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
    *
    * @param database - The database to set.
    */
-  async setDatabase(database: Db) {
+  async initialize(database: Db) {
     if (this.database) {
       throw new Error('Database connection already set');
     }
 
-    this.database = database;
-
     await ensureIndexes(database.collection(this.config.collectionName), {
       expireAfterSeconds: this.config.completedDocumentTTLSeconds,
     });
+
+    this.database = database;
 
     const resolvers = this.databaseResolvers.splice(0);
     for (const resolve of resolvers) {

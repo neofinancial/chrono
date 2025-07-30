@@ -30,7 +30,7 @@ describe('ChronoMongoDatastore', () => {
       collectionName: TEST_DB_COLLECTION_NAME,
     });
 
-    await dataStore.setDatabase(mongoClient.db(DB_NAME));
+    await dataStore.initialize(mongoClient.db(DB_NAME));
   });
 
   beforeEach(async () => {
@@ -41,22 +41,43 @@ describe('ChronoMongoDatastore', () => {
     await mongoClient.close();
   });
 
-  describe('setDatabase', () => {
+  describe('initialize', () => {
     test('should throw an error if the database connection is already set', async () => {
-      await expect(() => dataStore.setDatabase(mongoClient.db(DB_NAME))).rejects.toThrow(
+      await expect(() => dataStore.initialize(mongoClient.db(DB_NAME))).rejects.toThrow(
         'Database connection already set',
       );
     });
   });
-  describe('schedule', () => {
-    describe('when called with valid input', () => {
-      const input = {
-        kind: 'test' as const,
-        data: { test: 'test' },
-        priority: 1,
-        when: new Date(),
-      };
 
+  describe('schedule', () => {
+    const input = {
+      kind: 'test' as const,
+      data: { test: 'test' },
+      priority: 1,
+      when: new Date(),
+    };
+
+    describe('when called before initialize', () => {
+      test('should allow scheduling a task', async () => {
+        const store = new ChronoMongoDatastore({
+          collectionName: TEST_DB_COLLECTION_NAME,
+        });
+
+        const resultPromise = store.schedule(input);
+
+        await store.initialize(mongoClient.db(DB_NAME));
+
+        await expect(resultPromise).resolves.toEqual(
+          expect.objectContaining({
+            kind: input.kind,
+            status: 'PENDING',
+            data: input.data,
+          }),
+        );
+      });
+    });
+
+    describe('when called with valid input', () => {
       test('should return task with correct properties', async () => {
         const task = await dataStore.schedule(input);
 
@@ -121,6 +142,21 @@ describe('ChronoMongoDatastore', () => {
       priority: 1,
       when: new Date(Date.now() - 1),
     };
+
+    test('should allow claiming a task before initialize', async () => {
+      const store = new ChronoMongoDatastore({
+        collectionName: TEST_DB_COLLECTION_NAME,
+      });
+
+      const resultPromise = store.claim({
+        kind: input.kind,
+        claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS,
+      });
+
+      await store.initialize(mongoClient.db(DB_NAME));
+
+      await expect(resultPromise).resolves.toBeUndefined();
+    });
 
     test('should claim task in PENDING state with scheduledAt in the past', async () => {
       const task = await dataStore.schedule({
@@ -218,6 +254,31 @@ describe('ChronoMongoDatastore', () => {
   });
 
   describe('complete', () => {
+    test('should allow completing a task before initialize', async () => {
+      const task = await dataStore.schedule({
+        kind: 'test',
+        data: { test: 'test' },
+        priority: 1,
+        when: new Date(),
+      });
+
+      const store = new ChronoMongoDatastore({
+        collectionName: TEST_DB_COLLECTION_NAME,
+      });
+
+      const resultPromise = store.complete(task.id);
+
+      await store.initialize(mongoClient.db(DB_NAME));
+
+      await expect(resultPromise).resolves.toEqual(
+        expect.objectContaining({
+          id: task.id,
+          kind: task.kind,
+          status: TaskStatus.COMPLETED,
+        }),
+      );
+    });
+
     test('should mark task as completed', async () => {
       const task = await dataStore.schedule({
         kind: 'test',
@@ -256,6 +317,31 @@ describe('ChronoMongoDatastore', () => {
   });
 
   describe('fail', () => {
+    test('should allow failing a task before initialize', async () => {
+      const task = await dataStore.schedule({
+        kind: 'test',
+        data: { test: 'test' },
+        priority: 1,
+        when: new Date(),
+      });
+
+      const store = new ChronoMongoDatastore({
+        collectionName: TEST_DB_COLLECTION_NAME,
+      });
+
+      const resultPromise = store.fail(task.id);
+
+      await store.initialize(mongoClient.db(DB_NAME));
+
+      await expect(resultPromise).resolves.toEqual(
+        expect.objectContaining({
+          id: task.id,
+          kind: task.kind,
+          status: TaskStatus.FAILED,
+        }),
+      );
+    });
+
     test('should mark task as failed', async () => {
       const task = await dataStore.schedule({
         kind: 'test',
@@ -292,6 +378,31 @@ describe('ChronoMongoDatastore', () => {
   });
 
   describe('retryAt', () => {
+    test('should allow retrying a task before initialize', async () => {
+      const task = await dataStore.schedule({
+        kind: 'test',
+        data: { test: 'test' },
+        priority: 1,
+        when: new Date(),
+      });
+
+      const store = new ChronoMongoDatastore({
+        collectionName: TEST_DB_COLLECTION_NAME,
+      });
+
+      const resultPromise = store.retry(task.id, new Date());
+
+      await store.initialize(mongoClient.db(DB_NAME));
+
+      await expect(resultPromise).resolves.toEqual(
+        expect.objectContaining({
+          id: task.id,
+          kind: task.kind,
+          status: TaskStatus.PENDING,
+        }),
+      );
+    });
+
     test('should retry task', async () => {
       const firstScheduleDate = faker.date.past();
       const secondScheduleDate = faker.date.past();
@@ -340,6 +451,25 @@ describe('ChronoMongoDatastore', () => {
   });
 
   describe('delete', () => {
+    test('should allow deleting a task before initialize', async () => {
+      const task = await dataStore.schedule({
+        kind: 'test',
+        data: { test: 'test' },
+        priority: 1,
+        when: new Date(),
+      });
+
+      const store = new ChronoMongoDatastore({
+        collectionName: TEST_DB_COLLECTION_NAME,
+      });
+
+      const resultPromise = store.delete(task.id);
+
+      await store.initialize(mongoClient.db(DB_NAME));
+
+      await expect(resultPromise).resolves.toBeDefined();
+    });
+
     test('deletes task by id removing from datastore', async () => {
       const when = new Date();
 
