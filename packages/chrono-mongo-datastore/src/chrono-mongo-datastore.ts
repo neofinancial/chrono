@@ -48,27 +48,51 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
   implements Datastore<TaskMapping, MongoDatastoreOptions>
 {
   private config: ChronoMongoDatastoreConfig;
-  private database: Db;
+  private database: Db | undefined;
+  private databaseResolvers: Array<(database: Db) => void> = [];
 
-  private constructor(database: Db, config?: Partial<ChronoMongoDatastoreConfig>) {
-    this.database = database;
+  constructor(config?: Partial<ChronoMongoDatastoreConfig>) {
     this.config = {
       completedDocumentTTLSeconds: config?.completedDocumentTTLSeconds,
       collectionName: config?.collectionName || DEFAULT_COLLECTION_NAME,
     };
   }
 
-  static async create<TaskMapping extends TaskMappingBase>(
-    database: Db,
-    config?: Partial<ChronoMongoDatastoreConfig>,
-  ): Promise<ChronoMongoDatastore<TaskMapping>> {
-    const datastore = new ChronoMongoDatastore<TaskMapping>(database, config);
+  /**
+   * Sets the database connection for the datastore. Ensures that the indexes are created and resolves any pending promises waiting for the database.
+   *
+   * @param database - The database to set.
+   */
+  async initialize(database: Db) {
+    if (this.database) {
+      throw new Error('Database connection already set');
+    }
 
-    await ensureIndexes(database.collection(datastore.config.collectionName), {
-      expireAfterSeconds: datastore.config.completedDocumentTTLSeconds,
+    await ensureIndexes(database.collection(this.config.collectionName), {
+      expireAfterSeconds: this.config.completedDocumentTTLSeconds,
     });
 
-    return datastore;
+    this.database = database;
+
+    const resolvers = this.databaseResolvers.splice(0);
+    for (const resolve of resolvers) {
+      resolve(database);
+    }
+  }
+
+  /**
+   * Asyncronously gets the database connection for the datastore. If the database is not set, it will return a promise that resolves when the database is set.
+   *
+   * @returns The database connection.
+   */
+  public async getDatabase(): Promise<Db> {
+    if (this.database) {
+      return this.database;
+    }
+
+    return new Promise<Db>((resolve) => {
+      this.databaseResolvers.push(resolve);
+    });
   }
 
   async schedule<TaskKind extends keyof TaskMapping>(
@@ -86,7 +110,8 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     };
 
     try {
-      const results = await this.database.collection(this.config.collectionName).insertOne(createInput, {
+      const database = await this.getDatabase();
+      const results = await database.collection(this.config.collectionName).insertOne(createInput, {
         ...(input?.datastoreOptions?.session ? { session: input.datastoreOptions.session } : undefined),
         ignoreUndefined: true,
       });
@@ -101,7 +126,8 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
         'code' in error &&
         (error.code === 11000 || error.code === 11001)
       ) {
-        const existingTask = await this.collection<TaskKind>().findOne(
+        const collection = await this.collection<TaskKind>();
+        const existingTask = await collection.findOne(
           {
             idempotencyKey: input.idempotencyKey,
           },
@@ -131,7 +157,8 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined> {
     const filter =
       typeof key === 'string' ? { _id: new ObjectId(key) } : { kind: key.kind, idempotencyKey: key.idempotencyKey };
-    const task = await this.collection<TaskKind>().findOneAndDelete({
+    const collection = await this.collection<TaskKind>();
+    const task = await collection.findOneAndDelete({
       ...filter,
       ...(options?.force ? {} : { status: TaskStatus.PENDING }),
     });
@@ -156,7 +183,8 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     input: ClaimTaskInput<TaskKind>,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined> {
     const now = new Date();
-    const task = await this.collection<TaskKind>().findOneAndUpdate(
+    const collection = await this.collection<TaskKind>();
+    const task = await collection.findOneAndUpdate(
       {
         kind: input.kind,
         scheduledAt: { $lte: now },
@@ -229,17 +257,22 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     taskId: string,
     update: UpdateFilter<TaskDocument<TaskKind, TaskMapping[TaskKind]>>,
   ): Promise<TaskDocument<TaskKind, TaskMapping[TaskKind]>> {
-    const document = await this.collection<TaskKind>().findOneAndUpdate({ _id: new ObjectId(taskId) }, update, {
+    const collection = await this.collection<TaskKind>();
+    const document = await collection.findOneAndUpdate({ _id: new ObjectId(taskId) }, update, {
       returnDocument: 'after',
     });
+
     if (!document) {
       throw new Error(`Task with ID ${taskId} not found`);
     }
     return document;
   }
 
-  private collection<TaskKind extends keyof TaskMapping>(): Collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>> {
-    return this.database.collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>>(this.config.collectionName);
+  private async collection<TaskKind extends keyof TaskMapping>(): Promise<
+    Collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>>
+  > {
+    const database = await this.getDatabase();
+    return database.collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>>(this.config.collectionName);
   }
 
   private toObject<TaskKind extends keyof TaskMapping>(
