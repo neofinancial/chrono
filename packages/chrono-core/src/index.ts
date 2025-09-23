@@ -6,7 +6,7 @@ export {
   type RegisterTaskHandlerResponse,
 } from './chrono';
 export { ChronoEvents } from './events';
-export { ProcessorEvents } from './processors';
+export { ProcessorEvents, type ProcessorEventsMap } from './processors';
 
 export {
   TaskStatus,
