@@ -1,6 +1,6 @@
 {
   "name": "@neofinancial/chrono-mongo-datastore",
-  "version": "0.4.1-next.0",
+  "version": "0.4.1-next.1",
   "description": "MongoDB datastore implementation for Chrono task scheduling system",
   "private": false,
   "publishConfig": {
@@ -16,7 +16,10 @@
   "keywords": [],
   "author": "Neo Financial Engineering <engineering@neofinancial.com>",
   "license": "MIT",
-  "files": ["build/**", "README.md"],
+  "files": [
+    "build/**",
+    "README.md"
+  ],
   "scripts": {
     "clean": "rimraf ./build",
     "build": "tsc",

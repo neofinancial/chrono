@@ -1,15 +1,13 @@
-import { type MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 
 import {
-  BackoffStrategy,
-  type BackoffStrategyInput,
   type BackoffStrategyOptions,
-  type LinearBackoffStrategyConfig,
   backoffStrategyFactory,
   createExponentialBackoffStrategy,
   createFixedBackoffStrategy,
   createLinearBackoffStrategy,
   createNoBackoffStrategy,
+  type LinearBackoffStrategyConfig,
 } from '../../src/backoff-strategy';
 
 describe('Backoff Strategies', () => {

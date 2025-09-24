@@ -29,7 +29,6 @@ type SimpleProcessorConfig = {
 };
 
 const InternalProcessorEvents = { PROCESSOR_LOOP_EXIT: 'processorLoopExit' } as const;
-type InternalProcessorEvents = (typeof InternalProcessorEvents)[keyof typeof InternalProcessorEvents];
 
 type InternalProcessorEventsMap = {
   [InternalProcessorEvents.PROCESSOR_LOOP_EXIT]: [];

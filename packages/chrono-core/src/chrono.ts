@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:stream';
 import type { BackoffStrategyOptions } from './backoff-strategy';
 import type { Datastore, ScheduleInput, Task } from './datastore';
 import { ChronoEvents, type ChronoEventsMap } from './events';
-import { type Processor, createProcessor } from './processors';
+import { createProcessor, type Processor } from './processors';
 import type { ProcessorConfiguration } from './processors/create-processor';
 import type { ProcessorEventsMap } from './processors/events';
 import { promiseWithTimeout } from './utils/promise-utils';
