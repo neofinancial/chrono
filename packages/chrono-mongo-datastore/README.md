@@ -22,6 +22,18 @@ pnpm add @neofinancial/chrono-mongo-datastore
 yarn add @neofinancial/chrono-mongo-datastore
 ```
 
+This package supports both **CommonJS** and **ES Modules**:
+
+```typescript
+// ESM
+import { ChronoMongoDatastore } from "@neofinancial/chrono-mongo-datastore";
+
+// CommonJS
+const {
+  ChronoMongoDatastore,
+} = require("@neofinancial/chrono-mongo-datastore");
+```
+
 ## Peer Dependencies
 
 `@neofinancial/chrono` and `mongodb`

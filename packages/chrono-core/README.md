@@ -23,6 +23,16 @@ pnpm add @neofinancial/chrono
 yarn add @neofinancial/chrono
 ```
 
+This package supports both **CommonJS** and **ES Modules**:
+
+```typescript
+// ESM
+import { Chrono } from "@neofinancial/chrono";
+
+// CommonJS
+const { Chrono } = require("@neofinancial/chrono");
+```
+
 ## Basic Usage
 
 ```typescript
