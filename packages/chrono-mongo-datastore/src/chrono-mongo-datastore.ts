@@ -17,7 +17,7 @@ import {
   type UpdateFilter,
   type WithId,
 } from 'mongodb';
-import { IndexNames, ensureIndexes } from './mongo-indexes';
+import { ensureIndexes, IndexNames } from './mongo-indexes';
 
 const DEFAULT_COLLECTION_NAME = 'chrono-tasks';
 

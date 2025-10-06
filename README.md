@@ -14,6 +14,7 @@ Chrono is a monorepo containing `@neofinancial/chrono` built in datastore implem
 - **Configurable retry strategies**: Linear and exponential backoff with optional jitter
 - **Idempotency support**: Prevent duplicate task processing
 - **Event-based architecture**: Track task lifecycle events
+- **Dual module support**: Works with both CommonJS and ESM projects
 
 ## Packages
 

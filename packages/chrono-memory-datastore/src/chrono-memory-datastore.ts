@@ -120,6 +120,8 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
       ) {
         return t;
       }
+
+      return undefined;
     });
 
     if (claimedTask) {

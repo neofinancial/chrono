@@ -11,10 +11,10 @@ import type { Processor } from './processor';
 const DEFAULT_CONFIG: SimpleProcessorConfig = {
   maxConcurrency: 1,
   claimIntervalMs: 50,
-  claimStaleTimeoutMs: 10_000,
   idleIntervalMs: 5_000,
+  claimStaleTimeoutMs: 10_000,
   taskHandlerTimeoutMs: 5_000,
-  taskHandlerMaxRetries: 10,
+  taskHandlerMaxRetries: 5,
   processLoopRetryIntervalMs: 20_000,
 };
 
@@ -29,7 +29,6 @@ type SimpleProcessorConfig = {
 };
 
 const InternalProcessorEvents = { PROCESSOR_LOOP_EXIT: 'processorLoopExit' } as const;
-type InternalProcessorEvents = (typeof InternalProcessorEvents)[keyof typeof InternalProcessorEvents];
 
 type InternalProcessorEventsMap = {
   [InternalProcessorEvents.PROCESSOR_LOOP_EXIT]: [];

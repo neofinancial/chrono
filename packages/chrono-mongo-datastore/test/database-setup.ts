@@ -1,6 +1,7 @@
 import { MongoClient } from 'mongodb';
 /* eslint-disable no-console */
 import { MongoMemoryServer } from 'mongodb-memory-server';
+
 const formatMemoryUsage = (data: number) => `${Math.round((data / 1024 / 1024) * 100) / 100} MB`;
 
 let mongoServer: MongoMemoryServer | undefined;

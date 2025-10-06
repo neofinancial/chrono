@@ -4,13 +4,23 @@ import { type BackoffStrategyOptions, backoffStrategyFactory } from '../backoff-
 import type { Processor } from './processor';
 import { SimpleProcessor } from './simple-processor';
 
+/**
+ * Configuration for the processor.
+ */
 export type ProcessorConfiguration = {
+  /** The maximum number of concurrent tasks that the processor will use when processing. @default 1 */
   maxConcurrency?: number;
+  /** The interval at which the processor will wait before next poll when the previous poll returned a task @default 50ms */
   claimIntervalMs?: number;
-  claimStaleTimeoutMs?: number;
+  /** The interval at which the processor will wait before next poll when no tasks are available for processing @default 5000ms */
   idleIntervalMs?: number;
+  /** The maximum time a task can be claimed for processing before it will be considered stale and claimed again @default 10000ms */
+  claimStaleTimeoutMs?: number;
+  /** The maximum time a task handler can take to complete before it will be considered timed out @default 5000ms */
   taskHandlerTimeoutMs?: number;
+  /** The maximum number of retries for a task handler, before task is marked as failed. @default 5 */
   taskHandlerMaxRetries?: number;
+  /** The interval at which the processor will wait before next poll when an unexpected error occurs @default 20000ms */
   processLoopRetryIntervalMs?: number;
 };
 

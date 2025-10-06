@@ -22,14 +22,15 @@
     "publish": "pnpm i && pnpm build && pnpm publish -r"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.9.4",
-    "@faker-js/faker": "^9.6.0",
-    "@types/node": "20.17.24",
-    "fishery": "^2.2.3",
+    "@biomejs/biome": "^2.2.4",
+    "@faker-js/faker": "^9.9.0",
+    "@types/node": "^20.19.17",
+    "fishery": "^2.3.1",
     "husky": "^9.1.7",
     "rimraf": "^6.0.1",
-    "typescript": "^5.8.2",
-    "vitest": "^3.0.9",
-    "vitest-mock-extended": "^3.0.1"
+    "tsdown": "^0.15.6",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4",
+    "vitest-mock-extended": "^3.1.0"
   }
 }
