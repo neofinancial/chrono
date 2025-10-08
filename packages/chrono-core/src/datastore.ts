@@ -36,11 +36,17 @@ export type Task<TaskKind, TaskData> = {
 };
 
 export type ScheduleInput<TaskKind, TaskData, DatastoreOptions> = {
+  /** The date and time when the task is scheduled to run */
   when: Date;
+  /** The type of task */
   kind: TaskKind;
+  /** The payload or data associated with the task */
   data: TaskData;
+  /** The priority level of the task (lower numbers can indicate higher priority) */
   priority?: number;
+  /** A key used for idempotency to prevent duplicate processing */
   idempotencyKey?: string;
+  /** Additional options for the datastore to use when scheduling the task in the datastore. Can include things like a session for database transactions. Unique per datastore implementation.*/
   datastoreOptions?: DatastoreOptions;
 };
 

@@ -1,4 +1,4 @@
-import type { EventEmitter } from 'node:stream';
+import type { EventEmitter } from 'node:events';
 import type { TaskMappingBase } from '..';
 import type { ProcessorEventsMap } from './events';
 

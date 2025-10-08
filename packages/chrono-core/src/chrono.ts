@@ -1,4 +1,4 @@
-import { EventEmitter } from 'node:stream';
+import { EventEmitter } from 'node:events';
 
 import type { BackoffStrategyOptions } from './backoff-strategy';
 import type { Datastore, ScheduleInput, Task } from './datastore';
@@ -17,29 +17,30 @@ export type ScheduleTaskInput<TaskKind, TaskData, DatastoreOptions> = ScheduleIn
 >;
 
 export type RegisterTaskHandlerInput<TaskKind, TaskData> = {
+  /** The type of task */
   kind: TaskKind;
+  /** The handler function to process the task */
   handler: (task: Task<TaskKind, TaskData>) => Promise<void>;
+  /** The options for the backoff strategy to use when the task handler fails */
   backoffStrategyOptions?: BackoffStrategyOptions;
+  /** The configuration for the processor to use when processing the task */
   processorConfiguration?: ProcessorConfiguration;
 };
 
+/**
+ * Response from registering a task handler.
+ * @returns The processor instance that can be used to start and stop the processor.
+ */
 export type RegisterTaskHandlerResponse<
   TaskKind extends keyof TaskMapping,
   TaskMapping extends TaskMappingBase,
 > = EventEmitter<ProcessorEventsMap<TaskKind, TaskMapping>>;
 
 /**
- * This is a type that represents the mapping of task kinds to their respective data types.
- *
- * Eg. shape of the TaskMapping type:
- *
- * type TaskMapping = {
- *   "async-messaging": { someField: number };
- *   "send-email": { url: string };
- * };
- *
+ * The main class for scheduling and processing tasks.
+ * @param datastore - The datastore instance to use for storing and retrieving tasks.
+ * @returns The Chrono instance that can be used to start and stop the processors as well as receive chrono instance events.
  */
-
 export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> extends EventEmitter<ChronoEventsMap> {
   private readonly datastore: Datastore<TaskMapping, DatastoreOptions>;
   private readonly processors: Map<keyof TaskMapping, Processor<keyof TaskMapping, TaskMapping>> = new Map();
