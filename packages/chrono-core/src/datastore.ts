@@ -70,21 +70,44 @@ export interface Datastore<TaskMapping extends TaskMappingBase, DatastoreOptions
   schedule<TaskKind extends keyof TaskMapping>(
     input: ScheduleInput<TaskKind, TaskMapping[TaskKind], DatastoreOptions>,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
+
   delete<TaskKind extends keyof TaskMapping>(
     taskId: string,
     options?: DeleteOptions,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined>;
+
   delete<TaskKind extends keyof TaskMapping>(
     key: DeleteByIdempotencyKeyInput<TaskKind>,
     options?: DeleteOptions,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined>;
+
   claim<TaskKind extends Extract<keyof TaskMapping, string>>(
     input: ClaimTaskInput<TaskKind>,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined>;
+
   retry<TaskKind extends keyof TaskMapping>(
     taskId: string,
     retryAt: Date,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
-  complete<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
-  fail<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
+
+  complete<TaskKind extends keyof TaskMapping>(
+    taskId: string,
+  ): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
+
+  fail<TaskKind extends keyof TaskMapping>(
+    taskId: string,
+  ): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
+
+  /**
+   * Add a task to the Dead Letter Queue
+   */
+  addToDlq?<TaskKind extends keyof TaskMapping>(
+    task: Task<TaskKind, TaskMapping[TaskKind]>,
+    error?:Error,
+  ): Promise<void>;
+
+  /**
+   * Redrive messages from the Dead Letter Queue
+   */
+  redriveFromDlq?<TaskKind extends keyof TaskMapping>(): Promise<void>;
 }

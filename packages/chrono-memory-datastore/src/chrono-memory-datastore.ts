@@ -13,9 +13,11 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
   implements Datastore<TaskMapping, MemoryDatastoreOptions>
 {
   private store: Map<string, Task<keyof TaskMapping, TaskMapping[keyof TaskMapping]>>;
+  private dlqStore: Map<string, { task: Task<keyof TaskMapping, TaskMapping[keyof TaskMapping]>; error?: Error }>;
 
   constructor() {
     this.store = new Map();
+    this.dlqStore = new Map();
   }
 
   /**
@@ -202,5 +204,34 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
     }
 
     throw new Error(`Task with id ${taskId} not found`);
+  }
+
+  /**
+   * Add a task to the Dead Letter Queue
+   *
+   * @param task The task to move to DLQ
+   * @param error Optional error that caused the task to fail
+   */
+  async addToDlq<TaskKind extends keyof TaskMapping>(
+    task: Task<TaskKind, TaskMapping[TaskKind]>,
+    error?: Error,
+  ): Promise<void> {
+    const dlqId = task.id;
+    this.dlqStore.set(dlqId, { task, error });
+    // Remove from main store so it won't be processed again
+    this.store.delete(task.id);
+  }
+
+  /**
+   * Redrive messages from the Dead Letter Queue back into main store
+   */
+  async redriveFromDlq<TaskKind extends keyof TaskMapping>(): Promise<void> {
+    for (const [id, { task }] of this.dlqStore.entries()) {
+      task.status = TaskStatus.PENDING;
+      task.claimedAt = undefined;
+      task.lastExecutedAt = new Date();
+      this.store.set(id, task);
+      this.dlqStore.delete(id);
+    }
   }
 }

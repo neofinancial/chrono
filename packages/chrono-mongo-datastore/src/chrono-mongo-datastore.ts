@@ -20,6 +20,7 @@ import {
 import { ensureIndexes, IndexNames } from './mongo-indexes';
 
 const DEFAULT_COLLECTION_NAME = 'chrono-tasks';
+const DEFAULT_DLQ_COLLECTION_NAME = 'chrono-tasks-dlq';
 
 export type ChronoMongoDatastoreConfig = {
   /**
@@ -36,6 +37,13 @@ export type ChronoMongoDatastoreConfig = {
    * @type {string}
    */
   collectionName: string;
+
+  /**
+   * Optional name of the DLQ collection
+   *
+   * @type {string}
+   */
+  dlqCollectionName?: string;
 };
 
 export type MongoDatastoreOptions = {
@@ -55,6 +63,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     this.config = {
       completedDocumentTTLSeconds: config?.completedDocumentTTLSeconds,
       collectionName: config?.collectionName || DEFAULT_COLLECTION_NAME,
+      dlqCollectionName: config?.dlqCollectionName || DEFAULT_DLQ_COLLECTION_NAME,
     };
   }
 
@@ -72,6 +81,11 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
       expireAfterSeconds: this.config.completedDocumentTTLSeconds,
     });
 
+    // Ensure DLQ collection exists
+    await ensureIndexes(database.collection(this.config.dlqCollectionName!), {
+      expireAfterSeconds: this.config.completedDocumentTTLSeconds,
+    });
+
     this.database = database;
 
     const resolvers = this.databaseResolvers.splice(0);
@@ -81,7 +95,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
   }
 
   /**
-   * Asyncronously gets the database connection for the datastore. If the database is not set, it will return a promise that resolves when the database is set.
+   * Asynchronously gets the database connection for the datastore. If the database is not set, it will return a promise that resolves when the database is set.
    *
    * @returns The database connection.
    */
@@ -201,7 +215,6 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
       { $set: { status: TaskStatus.CLAIMED, claimedAt: now } },
       {
         sort: { priority: -1, scheduledAt: 1 },
-        // hint: IndexNames.CLAIM_DOCUMENT_INDEX as unknown as Document,
         returnDocument: 'after',
       },
     );
@@ -253,6 +266,62 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     return this.toObject(task);
   }
 
+  /**
+   * Add a task to the Dead Letter Queue
+   *
+   * @param task The task to move to DLQ
+   * @param error Optional error that caused the task to fail
+   */
+async addToDlq<TaskKind extends keyof TaskMapping>(
+  task: Task<TaskKind, TaskMapping[TaskKind]>,
+  error?: Error,
+): Promise<void> {
+  const database = await this.getDatabase();
+  const dlqCollection = database.collection(this.config.dlqCollectionName!);
+  const mainCollection = database.collection(this.config.collectionName);
+
+  // Convert task.id (string) back to ObjectId
+  const objectId = new ObjectId(task.id);
+
+  // Insert into DLQ using _id
+  await dlqCollection.insertOne({
+    ...task,
+    _id: objectId,
+    error: error?.message,
+    failedAt: new Date(),
+  });
+
+  // Remove from main collection by _id
+  await mainCollection.deleteOne({ _id: objectId });
+}
+
+
+  /**
+   * Redrive messages from the Dead Letter Queue back into main store
+   */
+async redriveFromDlq<TaskKind extends keyof TaskMapping>(): Promise<void> {
+  const database = await this.getDatabase();
+  const dlqCollection = database.collection(this.config.dlqCollectionName!);
+  const mainCollection = database.collection(this.config.collectionName);
+
+  const tasks = await dlqCollection.find<TaskDocument<TaskKind, TaskMapping[TaskKind]>>({}).toArray();
+
+  for (const task of tasks) {
+    // Re-insert into main collection keeping original _id
+    await mainCollection.insertOne({
+      ...task,
+      status: TaskStatus.PENDING,
+      claimedAt: undefined,
+      lastExecutedAt: new Date(),
+      _id: task._id, // make sure original _id is kept
+    });
+
+    // Remove from DLQ
+    await dlqCollection.deleteOne({ _id: task._id });
+  }
+}
+
+
   private async updateOrThrow<TaskKind extends keyof TaskMapping>(
     taskId: string,
     update: UpdateFilter<TaskDocument<TaskKind, TaskMapping[TaskKind]>>,
@@ -273,6 +342,13 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
   > {
     const database = await this.getDatabase();
     return database.collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>>(this.config.collectionName);
+  }
+
+  private async dlqCollection<TaskKind extends keyof TaskMapping>(): Promise<
+    Collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>>
+  > {
+    const database = await this.getDatabase();
+    return database.collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>>(this.config.dlqCollectionName!);
   }
 
   private toObject<TaskKind extends keyof TaskMapping>(
