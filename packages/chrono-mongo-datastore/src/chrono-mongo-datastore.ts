@@ -82,7 +82,11 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     });
 
     // Ensure DLQ collection exists
-    await ensureIndexes(database.collection(this.config.dlqCollectionName!), {
+    if (!this.config.dlqCollectionName) {
+      throw new Error('DLQ collection name is not set');
+    }
+
+    await ensureIndexes(database.collection(this.config.dlqCollectionName), {
       expireAfterSeconds: this.config.completedDocumentTTLSeconds,
     });
 
@@ -272,55 +276,55 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
    * @param task The task to move to DLQ
    * @param error Optional error that caused the task to fail
    */
-async addToDlq<TaskKind extends keyof TaskMapping>(
-  task: Task<TaskKind, TaskMapping[TaskKind]>,
-  error?: Error,
-): Promise<void> {
-  const database = await this.getDatabase();
-  const dlqCollection = database.collection(this.config.dlqCollectionName!);
-  const mainCollection = database.collection(this.config.collectionName);
+  async addToDlq<TaskKind extends keyof TaskMapping>(
+    task: Task<TaskKind, TaskMapping[TaskKind]>,
+    error?: Error,
+  ): Promise<void> {
+    const database = await this.getDatabase();
+    const dlqName = this.config.dlqCollectionName ?? 'chrono-tasks-dlq';
+    const dlqCollection = database.collection(dlqName);
+    const mainCollection = database.collection(this.config.collectionName);
 
-  // Convert task.id (string) back to ObjectId
-  const objectId = new ObjectId(task.id);
+    // Convert task.id (string) back to ObjectId
+    const objectId = new ObjectId(task.id);
 
-  // Insert into DLQ using _id
-  await dlqCollection.insertOne({
-    ...task,
-    _id: objectId,
-    error: error?.message,
-    failedAt: new Date(),
-  });
+    // Insert into DLQ using _id
+    await dlqCollection.insertOne({
+      ...task,
+      _id: objectId,
+      error: error?.message,
+      failedAt: new Date(),
+    });
 
-  // Remove from main collection by _id
-  await mainCollection.deleteOne({ _id: objectId });
-}
-
+    // Remove from main collection by _id
+    await mainCollection.deleteOne({ _id: objectId });
+  }
 
   /**
    * Redrive messages from the Dead Letter Queue back into main store
    */
-async redriveFromDlq<TaskKind extends keyof TaskMapping>(): Promise<void> {
-  const database = await this.getDatabase();
-  const dlqCollection = database.collection(this.config.dlqCollectionName!);
-  const mainCollection = database.collection(this.config.collectionName);
+  async redriveFromDlq<TaskKind extends keyof TaskMapping>(): Promise<void> {
+    const database = await this.getDatabase();
+    const dlqName = this.config.dlqCollectionName ?? 'chrono-tasks-dlq';
+    const dlqCollection = database.collection(dlqName);
+    const mainCollection = database.collection(this.config.collectionName);
 
-  const tasks = await dlqCollection.find<TaskDocument<TaskKind, TaskMapping[TaskKind]>>({}).toArray();
+    const tasks = await dlqCollection.find<TaskDocument<TaskKind, TaskMapping[TaskKind]>>({}).toArray();
 
-  for (const task of tasks) {
-    // Re-insert into main collection keeping original _id
-    await mainCollection.insertOne({
-      ...task,
-      status: TaskStatus.PENDING,
-      claimedAt: undefined,
-      lastExecutedAt: new Date(),
-      _id: task._id, // make sure original _id is kept
-    });
+    for (const task of tasks) {
+      // Re-insert into main collection keeping original _id
+      await mainCollection.insertOne({
+        ...task,
+        status: TaskStatus.PENDING,
+        claimedAt: undefined,
+        lastExecutedAt: new Date(),
+        _id: task._id, // make sure original _id is kept
+      });
 
-    // Remove from DLQ
-    await dlqCollection.deleteOne({ _id: task._id });
+      // Remove from DLQ
+      await dlqCollection.deleteOne({ _id: task._id });
+    }
   }
-}
-
 
   private async updateOrThrow<TaskKind extends keyof TaskMapping>(
     taskId: string,
@@ -344,12 +348,15 @@ async redriveFromDlq<TaskKind extends keyof TaskMapping>(): Promise<void> {
     return database.collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>>(this.config.collectionName);
   }
 
-  private async dlqCollection<TaskKind extends keyof TaskMapping>(): Promise<
+  /*private async dlqCollection<TaskKind extends keyof TaskMapping>(): Promise<
     Collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>>
   > {
     const database = await this.getDatabase();
-    return database.collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>>(this.config.dlqCollectionName!);
-  }
+    if (!this.config.dlqCollectionName) {
+      throw new Error('DLQ collection name is not set');
+    }
+    return database.collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>>(this.config.dlqCollectionName);
+  }*/
 
   private toObject<TaskKind extends keyof TaskMapping>(
     document: TaskDocument<TaskKind, TaskMapping[TaskKind]>,

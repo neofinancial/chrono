@@ -225,7 +225,7 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
   /**
    * Redrive messages from the Dead Letter Queue back into main store
    */
-  async redriveFromDlq<TaskKind extends keyof TaskMapping>(): Promise<void> {
+  async redriveFromDlq<_TaskKind extends keyof TaskMapping>(): Promise<void> {
     for (const [id, { task }] of this.dlqStore.entries()) {
       task.status = TaskStatus.PENDING;
       task.claimedAt = undefined;

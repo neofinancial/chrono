@@ -90,24 +90,20 @@ export interface Datastore<TaskMapping extends TaskMappingBase, DatastoreOptions
     retryAt: Date,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
 
-  complete<TaskKind extends keyof TaskMapping>(
-    taskId: string,
-  ): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
+  complete<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
 
-  fail<TaskKind extends keyof TaskMapping>(
-    taskId: string,
-  ): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
+  fail<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
 
   /**
    * Add a task to the Dead Letter Queue
    */
   addToDlq?<TaskKind extends keyof TaskMapping>(
     task: Task<TaskKind, TaskMapping[TaskKind]>,
-    error?:Error,
+    error?: Error,
   ): Promise<void>;
 
   /**
    * Redrive messages from the Dead Letter Queue
    */
-  redriveFromDlq?<TaskKind extends keyof TaskMapping>(): Promise<void>;
+  redriveFromDlq?<_TaskKind extends keyof TaskMapping>(): Promise<void>;
 }
