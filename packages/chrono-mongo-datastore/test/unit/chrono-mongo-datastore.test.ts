@@ -566,4 +566,46 @@ describe('ChronoMongoDatastore', () => {
       await dataStore.delete(new ObjectId().toHexString(), { force: true });
     });
   });
+
+  // ✅ DLQ redrive test
+  test('should move tasks from DLQ to main collection', async () => {
+    const dlqCollection = (await dataStore.getDatabase()).collection('chrono-tasks-dlq');
+    const dlqTasks = [
+      {
+        kind: 'test' as const,
+        data: { test: 'task1' },
+        status: 'FAILED' as const,
+        retryCount: 0,
+        _id: new ObjectId(),
+        originalScheduleDate: new Date(),
+        scheduledAt: new Date(),
+      },
+      {
+        kind: 'test' as const,
+        data: { test: 'task2' },
+        status: 'FAILED' as const,
+        retryCount: 1,
+        _id: new ObjectId(),
+        originalScheduleDate: new Date(),
+        scheduledAt: new Date(),
+      },
+    ];
+    await dlqCollection.insertMany(dlqTasks);
+
+    // Call redrive
+    await dataStore.redriveFromDlq();
+
+    // Verify tasks moved to main collection
+    const mainCollection = (await dataStore.getDatabase()).collection(TEST_DB_COLLECTION_NAME);
+    const mainTasks = await mainCollection.find({}).toArray();
+
+    expect(mainTasks).toHaveLength(dlqTasks.length);
+    mainTasks.forEach((task) => {
+      expect(task.status).toBe('PENDING');
+    });
+
+    // DLQ should now be empty
+    const remainingDlq = await dlqCollection.find({}).toArray();
+    expect(remainingDlq).toHaveLength(0);
+  });
 });

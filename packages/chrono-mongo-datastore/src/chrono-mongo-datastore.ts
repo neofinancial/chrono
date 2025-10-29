@@ -12,6 +12,7 @@ import {
   type ClientSession,
   type Collection,
   type Db,
+  MongoServerError,
   ObjectId,
   type OptionalId,
   type UpdateFilter,
@@ -20,6 +21,8 @@ import {
 import { ensureIndexes, IndexNames } from './mongo-indexes';
 
 const DEFAULT_COLLECTION_NAME = 'chrono-tasks';
+const DEFAULT_DLQ_COLLECTION_NAME = 'chrono-tasks-dlq';
+const DEFAULT_MAX_DLQ_RETRIES = 3;
 
 export type ChronoMongoDatastoreConfig = {
   /**
@@ -36,6 +39,21 @@ export type ChronoMongoDatastoreConfig = {
    * @type {string}
    */
   collectionName: string;
+
+  /**
+   * Optional name of the DLQ collection
+   *
+   * @type {string}
+   */
+  dlqCollectionName: string;
+
+  /**
+   * Maximum number of times a task can be redriven from DLQ before it's permanently failed
+   *
+   * @default 3
+   * @type {number}
+   */
+  maxDlqRetries?: number;
 };
 
 export type MongoDatastoreOptions = {
@@ -43,6 +61,13 @@ export type MongoDatastoreOptions = {
 };
 
 export type TaskDocument<TaskKind, TaskData> = WithId<Omit<Task<TaskKind, TaskData>, 'id'>>;
+
+type DlqTaskDocument<TaskKind, TaskData> = TaskDocument<TaskKind, TaskData> & {
+  error?: string;
+  failedAt?: Date;
+  dlqRetryCount: number;
+  lastRedrivenAt?: Date
+};
 
 export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
   implements Datastore<TaskMapping, MongoDatastoreOptions>
@@ -55,6 +80,8 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     this.config = {
       completedDocumentTTLSeconds: config?.completedDocumentTTLSeconds,
       collectionName: config?.collectionName || DEFAULT_COLLECTION_NAME,
+      dlqCollectionName: config?.dlqCollectionName || DEFAULT_DLQ_COLLECTION_NAME,
+      maxDlqRetries: config?.maxDlqRetries ?? DEFAULT_MAX_DLQ_RETRIES,
     };
   }
 
@@ -72,6 +99,15 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
       expireAfterSeconds: this.config.completedDocumentTTLSeconds,
     });
 
+    // Ensure DLQ collection exists
+    if (!this.config.dlqCollectionName) {
+      throw new Error('DLQ collection name is not set');
+    }
+
+    await ensureIndexes(database.collection(this.config.dlqCollectionName), {
+      expireAfterSeconds: this.config.completedDocumentTTLSeconds,
+    });
+
     this.database = database;
 
     const resolvers = this.databaseResolvers.splice(0);
@@ -81,7 +117,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
   }
 
   /**
-   * Asyncronously gets the database connection for the datastore. If the database is not set, it will return a promise that resolves when the database is set.
+   * Asynchronously gets the database connection for the datastore. If the database is not set, it will return a promise that resolves when the database is set.
    *
    * @returns The database connection.
    */
@@ -192,16 +228,13 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
           { status: TaskStatus.PENDING },
           {
             status: TaskStatus.CLAIMED,
-            claimedAt: {
-              $lte: new Date(now.getTime() - input.claimStaleTimeoutMs),
-            },
+            claimedAt: { $lte: new Date(now.getTime() - input.claimStaleTimeoutMs) },
           },
         ],
       },
       { $set: { status: TaskStatus.CLAIMED, claimedAt: now } },
       {
         sort: { priority: -1, scheduledAt: 1 },
-        // hint: IndexNames.CLAIM_DOCUMENT_INDEX as unknown as Document,
         returnDocument: 'after',
       },
     );
@@ -252,6 +285,127 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
 
     return this.toObject(task);
   }
+
+  /**
+   * Add a task to the Dead Letter Queue
+   *
+   * @param task The task to move to DLQ
+   * @param error Optional error that caused the task to fail
+   */
+  async addToDlq<TaskKind extends keyof TaskMapping>(
+    task: Task<TaskKind, TaskMapping[TaskKind]>,
+    error?: Error,
+  ): Promise<void> {
+    const database = await this.getDatabase();
+    const dlqCollection = database.collection<DlqTaskDocument<TaskKind, TaskMapping[TaskKind]>>(
+      this.config.dlqCollectionName,
+    );
+    const mainCollection = database.collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>>(
+      this.config.collectionName,
+    );
+
+    // Convert task.id (string) back to ObjectId
+    const objectId = new ObjectId(task.id);
+
+
+    const dlqDoc: DlqTaskDocument<TaskKind, TaskMapping[TaskKind]> = {
+      kind: task.kind,
+      data: task.data,
+      status: TaskStatus.FAILED,
+      priority: task.priority,
+      idempotencyKey: task.idempotencyKey,
+      originalScheduleDate: task.originalScheduleDate,
+      scheduledAt: task.scheduledAt,
+      claimedAt: task.claimedAt,
+      completedAt: task.completedAt,
+      retryCount: task.retryCount,
+      _id: objectId,
+      error: error?.message,
+      failedAt: new Date(),
+      lastExecutedAt: task.lastExecutedAt ?? new Date(),
+      dlqRetryCount: 0,
+    };
+
+    // Upsert to handle case where task might already be in DLQ
+    await dlqCollection.insertOne(dlqDoc);
+
+    // Remove from main collection by _id
+    await mainCollection.deleteOne({ _id: objectId });
+  }
+
+  /**
+   * Redrive messages from the Dead Letter Queue back into main store
+   * Only redrive tasks that haven't exceeded the maximum DLQ retry limit
+   */
+async redriveFromDlq<TaskKind extends keyof TaskMapping>(): Promise<Task<TaskKind, TaskMapping[TaskKind]>[]> {
+  const database = await this.getDatabase();
+  const dlqCollection = database.collection<DlqTaskDocument<TaskKind, TaskMapping[TaskKind]>>(
+    this.config.dlqCollectionName,
+  );
+  const mainCollection = database.collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>>(
+    this.config.collectionName,
+  );
+
+  const maxRetries = this.config.maxDlqRetries ?? DEFAULT_MAX_DLQ_RETRIES;
+
+  const dlqDocs = await dlqCollection
+    .find<DlqTaskDocument<TaskKind, TaskMapping[TaskKind]>>({
+      $or: [{ dlqRetryCount: { $lt: maxRetries } }, { dlqRetryCount: { $exists: false } }],
+    })
+    .toArray();
+
+  const redrivenTasks: Task<TaskKind, TaskMapping[TaskKind]>[] = [];
+  const now = new Date();
+
+  for (const doc of dlqDocs) {
+    const newId = new ObjectId();
+
+    const newMainDoc: TaskDocument<TaskKind, TaskMapping[TaskKind]> = {
+      kind: doc.kind,
+      data: doc.data,
+      status: TaskStatus.PENDING,
+      priority: doc.priority,
+      idempotencyKey: doc.idempotencyKey,
+      originalScheduleDate: doc.originalScheduleDate,
+      scheduledAt: now,
+      claimedAt: undefined,
+      completedAt: undefined,
+      retryCount: 0,
+      lastExecutedAt: now,
+      _id: newId,
+    };
+
+    try {
+      await mainCollection.insertOne(newMainDoc);
+
+      // Successfully inserted - delete from DLQ
+      await dlqCollection.deleteOne({ _id: doc._id });
+
+      redrivenTasks.push({
+        id: newId.toHexString(),
+        kind: newMainDoc.kind as TaskKind,
+        data: newMainDoc.data as TaskMapping[TaskKind],
+        status: newMainDoc.status,
+        retryCount: newMainDoc.retryCount,
+        priority: newMainDoc.priority,
+        idempotencyKey: newMainDoc.idempotencyKey,
+        originalScheduleDate: newMainDoc.originalScheduleDate,
+        scheduledAt: newMainDoc.scheduledAt,
+        claimedAt: undefined,
+        completedAt: undefined,
+      });
+    } catch (err: unknown) {
+      if (err instanceof MongoServerError && err.code === 11000) {
+        await dlqCollection.deleteOne({ _id: doc._id });
+        continue;
+      }
+      console.error(`Failed to redrive task ${doc._id.toHexString()}:`, err);
+      continue;
+    }
+  }
+
+  return redrivenTasks;
+}
 
   private async updateOrThrow<TaskKind extends keyof TaskMapping>(
     taskId: string,

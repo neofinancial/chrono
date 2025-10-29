@@ -49,7 +49,6 @@ export class SimpleProcessor<
   implements Processor<TaskKind, TaskMapping>
 {
   private config: SimpleProcessorConfig;
-
   private exitChannels: EventEmitter<InternalProcessorEventsMap>[] = [];
   private stopRequested = false;
 
@@ -61,12 +60,7 @@ export class SimpleProcessor<
     config?: Partial<SimpleProcessorConfig>,
   ) {
     super();
-
-    this.config = {
-      ...DEFAULT_CONFIG,
-      ...config,
-    };
-
+    this.config = { ...DEFAULT_CONFIG, ...config };
     this.validatedHandlerTimeout();
   }
 
@@ -91,13 +85,10 @@ export class SimpleProcessor<
    * Max concurrent processes is defined by the `maxConcurrency` property set in the constructor.
    */
   async start(): Promise<void> {
-    if (this.stopRequested || this.exitChannels.length > 0) {
-      return;
-    }
+    if (this.stopRequested || this.exitChannels.length > 0) return;
 
     for (let i = 0; i < this.config.maxConcurrency; i++) {
       const exitChannel = new EventEmitter<InternalProcessorEventsMap>();
-
       this.exitChannels.push(exitChannel);
       this.runProcessLoop(exitChannel);
     }
@@ -112,7 +103,6 @@ export class SimpleProcessor<
       (channel) =>
         new Promise((resolve) => channel.once(InternalProcessorEvents.PROCESSOR_LOOP_EXIT, () => resolve(null))),
     );
-
     this.stopRequested = true;
 
     await Promise.all(exitPromises);
@@ -134,7 +124,6 @@ export class SimpleProcessor<
         // If no tasks are available, wait before trying again
         if (!task) {
           await setTimeout(this.config.idleIntervalMs);
-
           continue;
         }
 
@@ -147,7 +136,6 @@ export class SimpleProcessor<
         await setTimeout(this.config.claimIntervalMs);
       } catch (error) {
         this.emit(ProcessorEvents.UNKNOWN_PROCESSING_ERROR, { error, timestamp: new Date() });
-
         await setTimeout(this.config.processLoopRetryIntervalMs);
       }
     }
@@ -170,20 +158,18 @@ export class SimpleProcessor<
       await promiseWithTimeout(this.handler(task), this.config.taskHandlerTimeoutMs);
     } catch (error) {
       await this.handleTaskError(task, error as Error);
-
       return;
     }
 
     try {
       const completedTask = await this.datastore.complete<TaskKind>(task.id);
-
       this.emit(ProcessorEvents.TASK_COMPLETED, {
         task: completedTask,
         completedAt: completedTask.completedAt || new Date(),
       });
     } catch (error) {
       this.emit(ProcessorEvents.TASK_COMPLETION_FAILURE, {
-        error: error,
+        error,
         failedAt: new Date(),
         task,
       });
@@ -192,18 +178,52 @@ export class SimpleProcessor<
 
   private async handleTaskError(task: Task<TaskKind, TaskMapping[TaskKind]>, error: Error): Promise<void> {
     const failedAt = new Date();
+
     if (task.retryCount >= this.config.taskHandlerMaxRetries) {
-      // Mark the task as failed
-      await this.datastore.fail(task.id);
+      // Task has exceeded max retries - move to DLQ or mark as failed
+      if (this.datastore.addToDlq) {
+        await this.datastore.addToDlq(task, error);
+      } else {
+        await this.datastore.fail(task.id);
+      }
+
       this.emit(ProcessorEvents.TASK_FAILED, {
         task,
         error,
         failedAt,
       });
 
+      // Schedule automatic redrive from DLQ after delay
+      // This is bounded by maxDlqRetries in the datastore configuration
+      // Tasks that exceed the DLQ retry limit will remain in DLQ permanently
+      if (this.datastore.redriveFromDlq) {
+        const redriveFn = this.datastore.redriveFromDlq.bind(this.datastore);
+        const redriveDelayMs = 60_000; // 1 minute
+
+        // Schedule redrive in background so we don't block the loop
+        void (async () => {
+          await setTimeout(redriveDelayMs);
+          try {
+            const result = await redriveFn<TaskKind>();
+            const redrivenTasks = Array.isArray(result) ? result : [];
+            redrivenTasks.forEach((t) => {
+              this.emit(ProcessorEvents.TASK_RETRY_SCHEDULED, {
+                task: t,
+                error: null,
+                errorAt: new Date(),
+                retryScheduledAt: t.scheduledAt ?? new Date(),
+              });
+            });
+          } catch (err) {
+            this.emit(ProcessorEvents.UNKNOWN_PROCESSING_ERROR, { error: err, timestamp: new Date() });
+          }
+        })();
+      }
+
       return;
     }
 
+    // Schedule retry using backoff
     const delay = this.backOffStrategy({ retryAttempt: task.retryCount });
     const retryAt = new Date(Date.now() + delay);
 
