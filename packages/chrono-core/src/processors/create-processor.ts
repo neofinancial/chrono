@@ -18,7 +18,7 @@ export type ProcessorConfiguration = {
   claimStaleTimeoutMs?: number;
   /** The maximum time a task handler can take to complete before it will be considered timed out @default 5000ms */
   taskHandlerTimeoutMs?: number;
-  /** The maximum number of retries for a tasak handler, before task is marked as failed. @default 5 */
+  /** The maximum number of retries for a task handler, before task is marked as failed. @default 5 */
   taskHandlerMaxRetries?: number;
   /** The interval at which the processor will wait before next poll when an unexpected error occurs @default 20000ms */
   processLoopRetryIntervalMs?: number;

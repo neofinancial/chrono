@@ -103,8 +103,8 @@ export class SimpleProcessor<
       (channel) =>
         new Promise((resolve) => channel.once(InternalProcessorEvents.PROCESSOR_LOOP_EXIT, () => resolve(null))),
     );
-
     this.stopRequested = true;
+
     await Promise.all(exitPromises);
   }
 
@@ -180,8 +180,7 @@ export class SimpleProcessor<
     const failedAt = new Date();
 
     if (task.retryCount >= this.config.taskHandlerMaxRetries) {
-      // --- Existing behavior: mark the task as failed ---
-      // Use DLQ if available, otherwise fallback to fail
+      // Task has exceeded max retries - move to DLQ or mark as failed
       if (this.datastore.addToDlq) {
         await this.datastore.addToDlq(task, error);
       } else {
@@ -194,29 +193,37 @@ export class SimpleProcessor<
         failedAt,
       });
 
-      // --- Optional redrive logic ---
+      // Schedule automatic redrive from DLQ after delay
+      // This is bounded by maxDlqRetries in the datastore configuration
+      // Tasks that exceed the DLQ retry limit will remain in DLQ permanently
       if (this.datastore.redriveFromDlq) {
+        const redriveFn = this.datastore.redriveFromDlq.bind(this.datastore);
         const redriveDelayMs = 60_000; // 1 minute
-        await setTimeout(redriveDelayMs); // Delay before redrive
-        try {
-          await this.datastore.redriveFromDlq<TaskKind>();
-          this.emit(ProcessorEvents.TASK_RETRY_SCHEDULED, {
-            task,
-            error: null,
-            errorAt: new Date(),
-            retryScheduledAt: new Date(Date.now() + redriveDelayMs),
-          });
-        } catch (redriveError) {
-          this.emit(ProcessorEvents.UNKNOWN_PROCESSING_ERROR, {
-            error: redriveError,
-            timestamp: new Date(),
-          });
-        }
+
+        // Schedule redrive in background so we don't block the loop
+        void (async () => {
+          await setTimeout(redriveDelayMs);
+          try {
+            const result = await redriveFn<TaskKind>();
+            const redrivenTasks = Array.isArray(result) ? result : [];
+            redrivenTasks.forEach((t) => {
+              this.emit(ProcessorEvents.TASK_RETRY_SCHEDULED, {
+                task: t,
+                error: null,
+                errorAt: new Date(),
+                retryScheduledAt: t.scheduledAt ?? new Date(),
+              });
+            });
+          } catch (err) {
+            this.emit(ProcessorEvents.UNKNOWN_PROCESSING_ERROR, { error: err, timestamp: new Date() });
+          }
+        })();
       }
 
       return;
     }
 
+    // Schedule retry using backoff
     const delay = this.backOffStrategy({ retryAttempt: task.retryCount });
     const retryAt = new Date(Date.now() + delay);
 

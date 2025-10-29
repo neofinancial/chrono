@@ -15,6 +15,7 @@ export const defineTaskFactory = <TaskMapping extends TaskMappingBase>(
         data: defaultTaskData,
         scheduledAt: faker.date.past(),
         originalScheduleDate: faker.date.past(),
+        retryCount: faker.number.int({ min: 0, max: 5 }),
       };
     },
   );

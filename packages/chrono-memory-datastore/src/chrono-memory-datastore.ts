@@ -9,15 +9,41 @@ import {
   TaskStatus,
 } from '@neofinancial/chrono';
 
+const DEFAULT_MAX_DLQ_RETRIES = 3;
+
+type DlqEntry<TaskKind, TaskData> = {
+  task: Task<TaskKind, TaskData>;
+  error?: Error;
+  dlqRetryCount: number;
+  failedAt: Date;
+  lastRedrivenAt?: Date;
+};
+
+export type ChronoMemoryDatastoreConfig = {
+  /**
+   * Maximum number of times a task can be redriven from DLQ before it's permanently failed
+   *
+   * @default 3
+   * @type {number}
+   */
+  maxDlqRetries?: number;
+};
+
 export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDatastoreOptions>
   implements Datastore<TaskMapping, MemoryDatastoreOptions>
 {
   private store: Map<string, Task<keyof TaskMapping, TaskMapping[keyof TaskMapping]>>;
-  private dlqStore: Map<string, { task: Task<keyof TaskMapping, TaskMapping[keyof TaskMapping]>; error?: Error }>;
+  private dlqStore: Map<string, DlqEntry<keyof TaskMapping, TaskMapping[keyof TaskMapping]>>;
+  private nextId: number;
+  private config: ChronoMemoryDatastoreConfig;
 
-  constructor() {
+  constructor(config?: ChronoMemoryDatastoreConfig) {
     this.store = new Map();
     this.dlqStore = new Map();
+    this.nextId = 0;
+    this.config = {
+      maxDlqRetries: config?.maxDlqRetries ?? DEFAULT_MAX_DLQ_RETRIES,
+    };
   }
 
   /**
@@ -39,7 +65,7 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
       }
     }
 
-    const id = this.store.size.toString();
+    const id = (this.nextId++).toString();
 
     const task: Task<TaskKind, TaskMapping[TaskKind]> = {
       id,
@@ -216,22 +242,69 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
     task: Task<TaskKind, TaskMapping[TaskKind]>,
     error?: Error,
   ): Promise<void> {
-    const dlqId = task.id;
-    this.dlqStore.set(dlqId, { task, error });
+    // Store in DLQ with retry count starting at 0
+    const dlqEntry: DlqEntry<TaskKind, TaskMapping[TaskKind]> = {
+      task: { ...task, status: TaskStatus.FAILED },
+      error,
+      dlqRetryCount: 0,
+      failedAt: new Date(),
+    };
+
+    this.dlqStore.set(task.id, dlqEntry);
+
     // Remove from main store so it won't be processed again
     this.store.delete(task.id);
   }
 
   /**
    * Redrive messages from the Dead Letter Queue back into main store
+   * Only redrive tasks that haven't exceeded the maximum DLQ retry limit
    */
-  async redriveFromDlq<_TaskKind extends keyof TaskMapping>(): Promise<void> {
-    for (const [id, { task }] of this.dlqStore.entries()) {
-      task.status = TaskStatus.PENDING;
-      task.claimedAt = undefined;
-      task.lastExecutedAt = new Date();
-      this.store.set(id, task);
-      this.dlqStore.delete(id);
+  async redriveFromDlq<TaskKind extends keyof TaskMapping>(): Promise<Task<TaskKind, TaskMapping[TaskKind]>[]> {
+    const redrivenTasks: Task<TaskKind, TaskMapping[TaskKind]>[] = [];
+    const now = new Date();
+    const maxRetries = this.config.maxDlqRetries ?? DEFAULT_MAX_DLQ_RETRIES;
+
+    const entriesToRedrive = Array.from(this.dlqStore.entries()).filter(
+      ([_, entry]) => entry.dlqRetryCount < maxRetries,
+    );
+
+    for (const [oldId, entry] of entriesToRedrive) {
+      // Create new task with new ID and reset retry count
+      const newId = (this.nextId++).toString();
+      const newTask: Task<TaskKind, TaskMapping[TaskKind]> = {
+        ...entry.task,
+        id: newId,
+        status: TaskStatus.PENDING,
+        claimedAt: undefined,
+        completedAt: undefined,
+        retryCount: 0,
+        scheduledAt: now,
+        lastExecutedAt: now,
+      } as Task<TaskKind, TaskMapping[TaskKind]>;
+
+      // Check for duplicate idempotencyKey in main store
+      if (newTask.idempotencyKey) {
+        const duplicate = Array.from(this.store.values()).find(
+          (t) => t.kind === newTask.kind && t.idempotencyKey === newTask.idempotencyKey,
+        );
+
+        if (duplicate) {
+          // Task already exists in main store, just remove from DLQ
+          this.dlqStore.delete(oldId);
+          continue;
+        }
+      }
+
+      // Add to main store with new ID
+      this.store.set(newId, newTask);
+
+      // Delete from DLQ after successful redrive
+      this.dlqStore.delete(oldId);
+
+      redrivenTasks.push(newTask);
     }
+
+    return redrivenTasks;
   }
 }
