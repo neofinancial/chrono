@@ -1,37 +1,37 @@
 {
-	"name": "chrono-monorepo",
-	"description": "Monorepo for chrono packages",
-	"engines": {
-		"node": ">=20.18.3",
-		"pnpm": ">=10.6.2"
-	},
-	"keywords": [],
-	"author": "Neo Financial Engineering <engineering@neofinancial.com>",
-	"license": "MIT",
-	"private": true,
-	"packageManager": "pnpm@10.6.5",
-	"scripts": {
-		"clean": "pnpm --recursive run clean && rimraf node_modules",
-		"build": "pnpm --recursive run build",
-		"typecheck": "pnpm --recursive run typecheck",
-		"check": "biome check",
-		"format": "biome format --write",
-		"lint": "biome lint",
-		"prepare": "husky",
-		"test": "pnpm --recursive run test",
-		"publish": "pnpm i && pnpm build && pnpm publish -r"
-	},
-	"devDependencies": {
-		"@biomejs/biome": "^2.3.13",
-		"@faker-js/faker": "^9.9.0",
-		"@types/node": "^20.19.17",
-		"fishery": "^2.4.0",
-		"husky": "^9.1.7",
-		"lint-staged": "^16.2.7",
-		"rimraf": "^6.1.2",
-		"tsdown": "^0.20.1",
-		"typescript": "^5.9.3",
-		"vitest": "^4.0.18",
-		"vitest-mock-extended": "^3.1.0"
-	}
+  "name": "chrono-monorepo",
+  "description": "Monorepo for chrono packages",
+  "engines": {
+    "node": ">=20.18.3",
+    "pnpm": ">=10.6.2"
+  },
+  "keywords": [],
+  "author": "Neo Financial Engineering <engineering@neofinancial.com>",
+  "license": "MIT",
+  "private": true,
+  "packageManager": "pnpm@10.6.5",
+  "scripts": {
+    "clean": "pnpm --recursive run clean",
+    "build": "pnpm --recursive run build",
+    "typecheck": "pnpm --recursive run typecheck",
+    "check": "biome check",
+    "format": "biome format --write",
+    "lint": "biome lint",
+    "prepare": "husky",
+    "test": "pnpm --recursive run test",
+    "publish": "pnpm i && pnpm build && pnpm publish -r"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.11",
+    "@faker-js/faker": "^9.9.0",
+    "@types/node": "^20.19.30",
+    "fishery": "^2.4.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
+    "rimraf": "^6.1.2",
+    "tsdown": "^0.19.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4",
+    "vitest-mock-extended": "^3.1.0"
+  }
 }
