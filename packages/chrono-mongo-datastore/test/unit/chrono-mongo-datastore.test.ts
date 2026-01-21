@@ -5,6 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test, vitest } from 
 
 import { ChronoMongoDatastore, type TaskDocument } from '../../src/chrono-mongo-datastore';
 import { DB_NAME } from '../database-setup';
+import { defineTaskFactory } from '../factories/task.factory';
 
 type TaskMapping = {
   test: {
@@ -19,6 +20,7 @@ describe('ChronoMongoDatastore', () => {
   let mongoClient: MongoClient;
   let collection: Collection<TaskDocument<keyof TaskMapping, TaskMapping[keyof TaskMapping]>>;
   let dataStore: ChronoMongoDatastore<TaskMapping>;
+  const testTaskFactory = defineTaskFactory<TaskMapping>('test', { test: 'test' });
 
   beforeAll(async () => {
     mongoClient = new MongoClient('mongodb://localhost:27017');
@@ -253,6 +255,36 @@ describe('ChronoMongoDatastore', () => {
     });
   });
 
+  describe('statistics', () => {
+    const failedTasks = testTaskFactory.buildList(10, { status: TaskStatus.FAILED });
+    const completedTasks = testTaskFactory.buildList(9, { status: TaskStatus.COMPLETED });
+    const pendingTasks = testTaskFactory.buildList(8, { status: TaskStatus.PENDING });
+    const claimedRecentlyTasks = testTaskFactory.buildList(7, {
+      status: TaskStatus.CLAIMED,
+      claimedAt: new Date(),
+    });
+    const claimedStaleTasks = testTaskFactory.buildList(6, {
+      status: TaskStatus.CLAIMED,
+      claimedAt: new Date(Date.now() - TEST_CLAIM_STALE_TIMEOUT_MS - 1),
+    });
+    test('should return statistics for a given task kind', async () => {
+      await Promise.all(
+        [...failedTasks, ...completedTasks, ...pendingTasks, ...claimedRecentlyTasks, ...claimedStaleTasks].map(
+          (task) => collection.insertOne({ ...task, _id: new ObjectId(task.id) }),
+        ),
+      );
+      const statistics = await dataStore.statistics({
+        taskKind: 'test',
+        claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS,
+      });
+      expect(statistics).toEqual(
+        expect.objectContaining({
+          claimableTaskCount: pendingTasks.length + claimedStaleTasks.length,
+          failedTaskCount: failedTasks.length,
+        }),
+      );
+    });
+  });
   describe('complete', () => {
     test('should allow completing a task before initialize', async () => {
       const task = await dataStore.schedule({

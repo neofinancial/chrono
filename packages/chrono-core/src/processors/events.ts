@@ -13,9 +13,18 @@ export const ProcessorEvents = {
   TASK_COMPLETION_FAILURE: 'taskCompletionFailure',
   /** An unknown and uncaught exception occurred in processor. Processing paused for processLoopRetryIntervalMs before continuing */
   UNKNOWN_PROCESSING_ERROR: 'unknownProcessingError',
+  /** A statistics event has been emitted */
+  STATISTICS_COLLECTED: 'statisticsCollected',
+  /** An error occurred while collecting statistics */
+  STATISTICS_COLLECTED_ERROR: 'statisticsCollectedError',
 } as const;
 
 export type ProcessorEvents = (typeof ProcessorEvents)[keyof typeof ProcessorEvents];
+
+export type Statistics = {
+  claimableTaskCount: number;
+  failedTaskCount: number;
+};
 
 export type ProcessorEventsMap<TaskKind extends keyof TaskMapping, TaskMapping extends TaskMappingBase> = {
   [ProcessorEvents.TASK_CLAIMED]: [{ task: Task<TaskKind, TaskMapping[TaskKind]>; claimedAt: Date }];
@@ -30,4 +39,6 @@ export type ProcessorEventsMap<TaskKind extends keyof TaskMapping, TaskMapping e
     { task: Task<TaskKind, TaskMapping[TaskKind]>; error: unknown; failedAt: Date },
   ];
   [ProcessorEvents.UNKNOWN_PROCESSING_ERROR]: [{ error: unknown; timestamp: Date }];
+  [ProcessorEvents.STATISTICS_COLLECTED]: [{ statistics: Statistics; timestamp: Date }];
+  [ProcessorEvents.STATISTICS_COLLECTED_ERROR]: [{ error: unknown; timestamp: Date }];
 };

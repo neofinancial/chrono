@@ -12,6 +12,8 @@ export {
   type DeleteInput,
   type DeleteOptions,
   type ScheduleInput,
+  type Statistics,
+  type StatisticsInput,
   type Task,
   TaskStatus,
 } from './datastore';

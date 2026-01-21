@@ -124,6 +124,40 @@ Chrono requires a datastore implementation to persist and manage tasks. Availabl
 - **[@neofinancial/chrono-memory-datastore](https://www.npmjs.com/package/@neofinancial/chrono-memory-datastore)**: In-memory datastore for development and testing
 - **[@neofinancial/chrono-mongo-datastore](https://www.npmjs.com/package/@neofinancial/chrono-mongo-datastore)**: MongoDB datastore for production use
 
+## Configuration
+
+You can tune processor behavior per task by passing `processorConfiguration` when registering a handler. Each task kind gets its own processor instance, and we currently only support the built-in simple processor.
+
+```typescript
+chrono.registerTaskHandler({
+  kind: "send-email",
+  handler: async (task) => {
+    // ...
+  },
+  processorConfiguration: {
+    maxConcurrency: 5,
+    claimIntervalMs: 50,
+    idleIntervalMs: 5000,
+    claimStaleTimeoutMs: 10000,
+    taskHandlerTimeoutMs: 5000,
+    taskHandlerMaxRetries: 5,
+    processLoopRetryIntervalMs: 20000,
+    statCollectionIntervalMs: 1_800_000,
+  },
+});
+```
+
+### Processor configuration options
+
+- `maxConcurrency` (default: 1): maximum number of concurrent tasks
+- `claimIntervalMs` (default: 50): wait time between polls when a task was claimed
+- `idleIntervalMs` (default: 5000): wait time between polls when no tasks are available
+- `claimStaleTimeoutMs` (default: 10000): max claim time before a task is considered stale
+- `taskHandlerTimeoutMs` (default: 5000): max handler runtime before timeout
+- `taskHandlerMaxRetries` (default: 5): max retries before a task is marked failed
+- `processLoopRetryIntervalMs` (default: 20000): wait time after unexpected errors
+- `statCollectionIntervalMs` (default: 1_800_000): interval for statistics events
+
 ## Events
 
 ### Chrono Instance Events
@@ -136,11 +170,14 @@ Chrono requires a datastore implementation to persist and manage tasks. Availabl
 
 **Task related events**
 
-- `task:claimed` - Emitted when a task is claimed
-- `task:completed` - Emitted when a task is successfully processed
-- `task:completion:failed` - Emitted when the task fails to mark as completed
-- `task:retry:requested` - Emitted when a task will be retried after an error
-- `task:failed` - Emitted when max retries is reached after errors
+- `taskClaimed` - Emitted when a task is claimed
+- `taskCompleted` - Emitted when a task is successfully processed
+- `taskCompletionFailed` - Emitted when the task fails to mark as completed
+- `taskRetryScheduled` - Emitted when a task will be retried after an error
+- `taskFailed` - Emitted when max retries is reached after errors and task moves to FAILED state
+- `unknownProcessingError` - Emitted when an unknown exception occurs in processor.
+- `statisticsCollected` - Emitted when task statistics are collected
+- `statisticsCollectedError` - Emitted when an error occurs while attempting to collect statistics
 
 ## Retry Strategies
 

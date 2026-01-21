@@ -1,6 +1,6 @@
 {
   "name": "@neofinancial/chrono-mongo-datastore",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "description": "MongoDB datastore implementation for Chrono task scheduling system",
   "private": false,
   "publishConfig": {
@@ -11,16 +11,9 @@
     "type": "git",
     "url": "https://github.com/neofinancial/chrono.git"
   },
-  "keywords": [],
-  "author": "Neo Financial Engineering <engineering@neofinancial.com>",
-  "license": "MIT",
-  "files": [
-    "build/**",
-    "README.md"
-  ],
-  "main": "./build/index.js",
+  "main": "./build/index.cjs",
   "module": "./build/index.mjs",
-  "types": "./build/index.d.ts",
+  "types": "./build/index.d.cts",
   "exports": {
     ".": {
       "import": {
@@ -28,8 +21,8 @@
         "default": "./build/index.mjs"
       },
       "require": {
-        "types": "./build/index.d.ts",
-        "default": "./build/index.js"
+        "types": "./build/index.d.cts",
+        "default": "./build/index.cjs"
       }
     }
   },
@@ -43,8 +36,8 @@
     "mongodb": "^6"
   },
   "devDependencies": {
-    "@neofinancial/chrono": "workspace:*",
-    "mongodb-memory-server": "^10.1.4"
+    "mongodb-memory-server": "^10.4.3",
+    "@neofinancial/chrono": "workspace:*"
   },
   "peerDependencies": {
     "@neofinancial/chrono": "workspace:*"

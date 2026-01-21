@@ -4,6 +4,8 @@ import {
   type DeleteInput,
   type DeleteOptions,
   type ScheduleInput,
+  type Statistics,
+  type StatisticsInput,
   type Task,
   type TaskMappingBase,
   TaskStatus,
@@ -207,6 +209,34 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     );
 
     return task ? this.toObject(task) : undefined;
+  }
+
+  public async statistics<TaskKind extends Extract<keyof TaskMapping, string>>(
+    input: StatisticsInput<TaskKind>,
+  ): Promise<Statistics> {
+    const now = new Date();
+    const collection = await this.collection<TaskKind>();
+    const [claimableTaskCount, failedTaskCount] = await Promise.all([
+      collection.countDocuments({
+        kind: input.taskKind,
+        scheduledAt: { $lte: now },
+        $or: [
+          { status: TaskStatus.PENDING },
+          {
+            status: TaskStatus.CLAIMED,
+            claimedAt: {
+              $lte: new Date(now.getTime() - input.claimStaleTimeoutMs),
+            },
+          },
+        ],
+      }),
+      collection.countDocuments({
+        kind: input.taskKind,
+        status: TaskStatus.FAILED,
+      }),
+    ]);
+
+    return { claimableTaskCount, failedTaskCount };
   }
 
   async retry<TaskKind extends keyof TaskMapping>(

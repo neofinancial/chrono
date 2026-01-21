@@ -15,6 +15,7 @@ const DEFAULT_CONFIG: SimpleProcessorConfiguration = {
   taskHandlerTimeoutMs: 5_000,
   taskHandlerMaxRetries: 5,
   processLoopRetryIntervalMs: 20_000,
+  statCollectionIntervalMs: 1_800_000,
 };
 
 export type SimpleProcessorConfiguration = {
@@ -32,6 +33,8 @@ export type SimpleProcessorConfiguration = {
   taskHandlerMaxRetries: number;
   /** The interval at which the processor will wait before next poll when an unexpected error occurs @default 20000ms */
   processLoopRetryIntervalMs: number;
+  /** The interval at which the processor will collect statistics and emit them as events. @default 1_800_000ms (30 minutes) */
+  statCollectionIntervalMs: number;
 };
 
 const InternalProcessorEvents = { PROCESSOR_LOOP_EXIT: 'processorLoopExit' } as const;
@@ -48,8 +51,8 @@ export class SimpleProcessor<
   extends EventEmitter<ProcessorEventsMap<TaskKind, TaskMapping>>
   implements Processor<TaskKind, TaskMapping>
 {
-  private config: SimpleProcessorConfiguration;
-
+  private config: SimpleProcessorConfig;
+  private statCollectionInterval: NodeJS.Timeout | undefined;
   private exitChannels: EventEmitter<InternalProcessorEventsMap>[] = [];
   private stopRequested = false;
 
@@ -67,18 +70,19 @@ export class SimpleProcessor<
       ...config,
     };
 
-    this.validateConfiguration();
+    this.validateConfigurations();
   }
 
   /**
    * Validates that the task handler timeout is less than the claim stale timeout.
+   * Also validates that the claim interval is less than the idle interval and the idle interval is less than the stat collection interval.
    * Throws an error if the validation fails.
    * This ensures that the task handler has enough time to complete before the task is considered stale.
    * This is important to prevent tasks from being claimed again while they are still being processed.
    *
    * @throws {Error} If the task handler timeout is greater than or equal to the claim stale timeout.
    */
-  private validateConfiguration() {
+  private validateConfigurations() {
     if (this.config.taskHandlerTimeoutMs >= this.config.claimStaleTimeoutMs) {
       throw new Error(
         `Task handler timeout (${this.config.taskHandlerTimeoutMs}ms) must be less than the claim stale timeout (${this.config.claimStaleTimeoutMs}ms)`,
@@ -88,6 +92,12 @@ export class SimpleProcessor<
     if (this.config.claimIntervalMs >= this.config.idleIntervalMs) {
       throw new Error(
         `Claim interval (${this.config.claimIntervalMs}ms) must be less than the idle interval (${this.config.idleIntervalMs}ms)`,
+      );
+    }
+
+    if (this.config.idleIntervalMs >= this.config.statCollectionIntervalMs) {
+      throw new Error(
+        `Idle interval (${this.config.idleIntervalMs}ms) must be less than the stat collection interval (${this.config.statCollectionIntervalMs}ms)`,
       );
     }
   }
@@ -100,6 +110,8 @@ export class SimpleProcessor<
     if (this.stopRequested || this.exitChannels.length > 0) {
       return;
     }
+
+    this.setupStatCollectionInterval();
 
     for (let i = 0; i < this.config.maxConcurrency; i++) {
       const exitChannel = new EventEmitter<InternalProcessorEventsMap>();
@@ -118,6 +130,11 @@ export class SimpleProcessor<
       (channel) =>
         new Promise((resolve) => channel.once(InternalProcessorEvents.PROCESSOR_LOOP_EXIT, () => resolve(null))),
     );
+
+    if (this.statCollectionInterval) {
+      clearInterval(this.statCollectionInterval);
+      this.statCollectionInterval = undefined;
+    }
 
     this.stopRequested = true;
 
@@ -196,6 +213,23 @@ export class SimpleProcessor<
         task,
       });
     }
+  }
+
+  private setupStatCollectionInterval() {
+    if (this.statCollectionInterval) {
+      return;
+    }
+
+    this.statCollectionInterval = setInterval(() => {
+      this.datastore
+        .statistics({ taskKind: this.taskKind, claimStaleTimeoutMs: this.config.claimStaleTimeoutMs })
+        .then((statistics) => {
+          this.emit(ProcessorEvents.STATISTICS_COLLECTED, { statistics, timestamp: new Date() });
+        })
+        .catch((error) => {
+          this.emit(ProcessorEvents.STATISTICS_COLLECTED_ERROR, { error, timestamp: new Date() });
+        });
+    }, this.config.statCollectionIntervalMs);
   }
 
   private async handleTaskError(task: Task<TaskKind, TaskMapping[TaskKind]>, error: Error): Promise<void> {

@@ -32,6 +32,27 @@ async function main() {
       baseDelayMs: 100,
     },
   });
+  processor1.on(ProcessorEvents.STATISTICS_COLLECTED, ({ statistics }) => {
+    console.log('statistics:', statistics);
+  });
+  processor1.on(ProcessorEvents.STATISTICS_COLLECTED_ERROR, ({ error }) => {
+    console.error('error collecting statistics:', error);
+  });
+  processor1.on(ProcessorEvents.TASK_CLAIMED, ({ task }) => {
+    console.log('task claimed:', task);
+  });
+  processor1.on(ProcessorEvents.TASK_RETRY_SCHEDULED, ({ task }) => {
+    console.log('task retry scheduled:', task);
+  });
+  processor1.on(ProcessorEvents.TASK_FAILED, ({ task }) => {
+    console.log('task failed:', task);
+  });
+  processor1.on(ProcessorEvents.TASK_COMPLETION_FAILURE, ({ task }) => {
+    console.log('task completion failure:', task);
+  });
+  processor1.on(ProcessorEvents.UNKNOWN_PROCESSING_ERROR, ({ error }) => {
+    console.error('unknown processing error:', error);
+  });
 
   const processor2 = chrono.registerTaskHandler({
     kind: 'send-email',
@@ -45,6 +66,28 @@ async function main() {
       baseDelayMs: 100,
       jitter: 'full',
     },
+  });
+
+  processor2.on(ProcessorEvents.STATISTICS_COLLECTED, ({ statistics }) => {
+    console.log('statistics:', statistics);
+  });
+  processor2.on(ProcessorEvents.STATISTICS_COLLECTED_ERROR, ({ error }) => {
+    console.error('error collecting statistics:', error);
+  });
+  processor2.on(ProcessorEvents.TASK_CLAIMED, ({ task }) => {
+    console.log('task claimed:', task);
+  });
+  processor2.on(ProcessorEvents.TASK_RETRY_SCHEDULED, ({ task }) => {
+    console.log('task retry scheduled:', task);
+  });
+  processor2.on(ProcessorEvents.TASK_FAILED, ({ task }) => {
+    console.log('task failed:', task);
+  });
+  processor2.on(ProcessorEvents.TASK_COMPLETION_FAILURE, ({ task }) => {
+    console.log('task completion failure:', task);
+  });
+  processor2.on(ProcessorEvents.UNKNOWN_PROCESSING_ERROR, ({ error }) => {
+    console.error('unknown processing error:', error);
   });
 
   // you can attach event listeners to the processors
