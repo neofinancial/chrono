@@ -255,34 +255,36 @@ describe('ChronoMongoDatastore', () => {
     });
   });
 
-  describe('statistics', () => {
+  describe('collectStatistics', () => {
     const failedTasks = testTaskFactory.buildList(10, { status: TaskStatus.FAILED });
     const completedTasks = testTaskFactory.buildList(9, { status: TaskStatus.COMPLETED });
-    const pendingTasks = testTaskFactory.buildList(8, { status: TaskStatus.PENDING });
-    const claimedRecentlyTasks = testTaskFactory.buildList(7, {
-      status: TaskStatus.CLAIMED,
-      claimedAt: new Date(),
+    const claimablePendingTasks = testTaskFactory.buildList(8, {
+      status: TaskStatus.PENDING,
+      scheduledAt: faker.date.past(),
     });
-    const claimedStaleTasks = testTaskFactory.buildList(6, {
+    const nonClaimablePendingTasks = testTaskFactory.buildList(7, {
+      status: TaskStatus.PENDING,
+      scheduledAt: faker.date.future(),
+    });
+    const claimedTasks = testTaskFactory.buildList(5, {
       status: TaskStatus.CLAIMED,
-      claimedAt: new Date(Date.now() - TEST_CLAIM_STALE_TIMEOUT_MS - 1),
     });
     test('should return statistics for a given task kind', async () => {
       await Promise.all(
-        [...failedTasks, ...completedTasks, ...pendingTasks, ...claimedRecentlyTasks, ...claimedStaleTasks].map(
+        [...failedTasks, ...completedTasks, ...claimablePendingTasks, ...nonClaimablePendingTasks, ...claimedTasks].map(
           (task) => collection.insertOne({ ...task, _id: new ObjectId(task.id) }),
         ),
       );
-      const statistics = await dataStore.statistics({
-        taskKind: 'test',
-        claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS,
+      const statistics = await dataStore.collectStatistics({
+        taskKinds: ['test' as const],
       });
-      expect(statistics).toEqual(
-        expect.objectContaining({
-          claimableTaskCount: pendingTasks.length + claimedStaleTasks.length,
-          failedTaskCount: failedTasks.length,
-        }),
-      );
+      expect(statistics).toEqual({
+        test: {
+          pendingCount: claimablePendingTasks.length,
+          failedCount: failedTasks.length,
+          claimedCount: claimedTasks.length,
+        },
+      });
     });
   });
   describe('complete', () => {

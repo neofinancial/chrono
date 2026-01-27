@@ -1,11 +1,12 @@
 import {
   type ClaimTaskInput,
+  type CollectStatisticsInput,
   type Datastore,
   type DeleteInput,
   type DeleteOptions,
   type ScheduleInput,
   type Statistics,
-  type StatisticsInput,
+  type StatisticsCollectorDatastore,
   type Task,
   type TaskMappingBase,
   TaskStatus,
@@ -47,7 +48,7 @@ export type MongoDatastoreOptions = {
 export type TaskDocument<TaskKind, TaskData> = WithId<Omit<Task<TaskKind, TaskData>, 'id'>>;
 
 export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
-  implements Datastore<TaskMapping, MongoDatastoreOptions>
+  implements Datastore<TaskMapping, MongoDatastoreOptions>, StatisticsCollectorDatastore<TaskMapping>
 {
   private config: ChronoMongoDatastoreConfig;
   private database: Db | undefined;
@@ -211,32 +212,48 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     return task ? this.toObject(task) : undefined;
   }
 
-  public async statistics<TaskKind extends Extract<keyof TaskMapping, string>>(
-    input: StatisticsInput<TaskKind>,
-  ): Promise<Statistics> {
-    const now = new Date();
-    const collection = await this.collection<TaskKind>();
-    const [claimableTaskCount, failedTaskCount] = await Promise.all([
-      collection.countDocuments({
-        kind: input.taskKind,
-        scheduledAt: { $lte: now },
-        $or: [
-          { status: TaskStatus.PENDING },
-          {
-            status: TaskStatus.CLAIMED,
-            claimedAt: {
-              $lte: new Date(now.getTime() - input.claimStaleTimeoutMs),
-            },
-          },
-        ],
-      }),
-      collection.countDocuments({
-        kind: input.taskKind,
-        status: TaskStatus.FAILED,
-      }),
-    ]);
+  public async collectStatistics(input: CollectStatisticsInput<TaskMapping>): Promise<Statistics<TaskMapping>> {
+    const collection = await this.collection();
 
-    return { claimableTaskCount, failedTaskCount };
+    const stats = await collection.aggregate<{ _id: { kind: keyof TaskMapping; status: TaskStatus }; count: number }>(
+      [
+        {
+          $match: {
+            kind: { $in: input.taskKinds },
+            status: { $in: [TaskStatus.PENDING, TaskStatus.FAILED, TaskStatus.CLAIMED] },
+            scheduledAt: { $lt: new Date() },
+          },
+        },
+        {
+          $group: {
+            _id: { kind: '$kind', status: '$status' },
+            count: { $sum: 1 },
+          },
+        },
+      ],
+      { hint: IndexNames.CLAIM_DOCUMENT_INDEX },
+    );
+
+    const result: Statistics<TaskMapping> = input.taskKinds.reduce(
+      (acc, kind) => {
+        acc[kind] = { claimedCount: 0, pendingCount: 0, failedCount: 0 };
+        return acc;
+      },
+      {} as Statistics<TaskMapping>,
+    );
+
+    for await (const stat of stats) {
+      const kind = stat._id.kind;
+      if (stat._id.status === TaskStatus.PENDING) {
+        result[kind].pendingCount = stat.count;
+      } else if (stat._id.status === TaskStatus.FAILED) {
+        result[kind].failedCount = stat.count;
+      } else if (stat._id.status === TaskStatus.CLAIMED) {
+        result[kind].claimedCount = stat.count;
+      }
+    }
+
+    return result;
   }
 
   async retry<TaskKind extends keyof TaskMapping>(

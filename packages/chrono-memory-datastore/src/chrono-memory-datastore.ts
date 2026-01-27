@@ -5,7 +5,6 @@ import {
   type DeleteOptions,
   type ScheduleInput,
   type Statistics,
-  type StatisticsInput,
   type Task,
   type TaskMappingBase,
   TaskStatus,
@@ -134,24 +133,6 @@ export class ChronoMemoryDatastore<TaskMapping extends TaskMappingBase, MemoryDa
     }
   }
 
-  public async statistics<TaskKind extends Extract<keyof TaskMapping, string>>(
-    input: StatisticsInput<TaskKind>,
-  ): Promise<Statistics> {
-    const now = new Date();
-    const claimableTaskCount = Array.from(this.store.values()).filter((t) => {
-      return (
-        t.kind === input.taskKind &&
-        (t.status === TaskStatus.PENDING ||
-          (t.status === TaskStatus.CLAIMED &&
-            t.claimedAt &&
-            t.claimedAt <= new Date(now.getTime() - input.claimStaleTimeoutMs)))
-      );
-    }).length;
-    const failedTaskCount = Array.from(this.store.values()).filter((t) => {
-      return t.kind === input.taskKind && t.status === TaskStatus.FAILED;
-    }).length;
-    return { claimableTaskCount, failedTaskCount };
-  }
   /**
    * Schedules a task to be retried and returns it.
    *

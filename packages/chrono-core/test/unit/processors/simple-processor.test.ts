@@ -1,17 +1,24 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 
 import type { Datastore } from '../../../src/datastore';
-import { ProcessorEvents } from '../../../src/processors/events';
 import { SimpleProcessor } from '../../../src/processors/simple-processor';
+import { defineTaskFactory } from '../../factories/task.factory';
+
+// Mock node:timers/promises to use the global setTimeout which works with fake timers
+vi.mock('node:timers/promises', () => ({
+  setTimeout: (ms: number) => new Promise((resolve) => setTimeout(resolve, ms)),
+}));
 
 describe('SimpleProcessor', () => {
   type TaskMapping = {
     'send-test-task': { foo: string };
   };
   type DatastoreOptions = Record<string, unknown>;
+  const backoffStrategy = () => 1;
+  const handler = vi.fn(async () => Promise.resolve());
 
   const datastore = mock<Datastore<TaskMapping, DatastoreOptions>>();
+  const taskFactory = defineTaskFactory<TaskMapping>('send-test-task', { foo: 'bar' });
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -22,99 +29,80 @@ describe('SimpleProcessor', () => {
     vi.resetAllMocks();
   });
 
-  describe('statistics interval', () => {
-    const claimStaleTimeoutMs = 10000;
-    test('emits statisticsCollected on interval', async () => {
-      datastore.statistics.mockResolvedValue({ claimableTaskCount: 1, failedTaskCount: 0 });
-
-      const processor = new SimpleProcessor(
-        datastore,
-        'send-test-task',
-        vi.fn(async () => {}),
-        () => 0,
-        {
-          maxConcurrency: 0,
-          claimIntervalMs: 10,
-          idleIntervalMs: 50,
-          statCollectionIntervalMs: 100,
-          claimStaleTimeoutMs,
-        },
-      );
-
-      const emitSpy = vi.spyOn(processor, 'emit');
-
-      await processor.start();
-
-      await vi.advanceTimersByTimeAsync(200);
-
-      expect(datastore.statistics).toHaveBeenCalledTimes(2);
-      expect(datastore.statistics).toHaveBeenCalledWith({ taskKind: 'send-test-task', claimStaleTimeoutMs });
-      expect(emitSpy).toHaveBeenCalledTimes(2);
-      expect(emitSpy).toHaveBeenCalledWith(
-        ProcessorEvents.STATISTICS_COLLECTED,
-        expect.objectContaining({ timestamp: expect.any(Date) }),
-      );
-
-      await processor.stop();
+  describe('constructor', () => {
+    test('should throw an error when the task handler timeout is greater than or equal to the claim stale timeout', () => {
+      expect(
+        () =>
+          new SimpleProcessor(datastore, 'test', handler, backoffStrategy, {
+            taskHandlerTimeoutMs: 10_000,
+            claimStaleTimeoutMs: 10_000,
+          }),
+      ).toThrow('Task handler timeout (10000ms) must be less than the claim stale timeout (10000ms)');
+    });
+    test('should throw an error when the claim interval is greater than or equal to the idle interval', () => {
+      expect(
+        () =>
+          new SimpleProcessor(datastore, 'test', handler, backoffStrategy, {
+            claimIntervalMs: 10_000,
+            idleIntervalMs: 10_000,
+          }),
+      ).toThrow('Claim interval (10000ms) must be less than the idle interval (10000ms)');
     });
 
-    test('emits statisticsCollectedError when statistics fails', async () => {
-      const error = new Error('stats failure');
-      datastore.statistics.mockRejectedValue(error);
+    test('should create a simple processor successfully', () => {
+      const processor = new SimpleProcessor(datastore, 'test', handler, backoffStrategy, {});
 
-      const processor = new SimpleProcessor(
-        datastore,
-        'send-test-task',
-        vi.fn(async () => {}),
-        () => 0,
-        {
-          maxConcurrency: 0,
-          claimIntervalMs: 10,
-          idleIntervalMs: 50,
-          statCollectionIntervalMs: 100,
-        },
-      );
+      expect(processor).toBeInstanceOf(SimpleProcessor);
+    });
+  });
 
-      const emitSpy = vi.spyOn(processor, 'emit');
+  describe('start', () => {
+    test('should start the processor successfully and call handler every claimIntervalMs if datastore returns a task', async () => {
+      const task = taskFactory.build();
+      datastore.claim.mockResolvedValue(task);
+      const processor = new SimpleProcessor(datastore, 'test', handler, backoffStrategy, {
+        claimIntervalMs: 1000,
+      });
 
       await processor.start();
 
-      await vi.advanceTimersByTimeAsync(100);
+      // First claim happens immediately
+      await vi.advanceTimersByTimeAsync(10);
+      expect(datastore.claim).toHaveBeenCalledTimes(1);
 
-      expect(datastore.statistics).toHaveBeenCalledWith({ taskKind: 'send-test-task', claimStaleTimeoutMs });
-      expect(emitSpy).toHaveBeenCalledWith(
-        ProcessorEvents.STATISTICS_COLLECTED_ERROR,
-        expect.objectContaining({ error, timestamp: expect.any(Date) }),
-      );
+      // Second claim after claimIntervalMs (1000ms)
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(datastore.claim).toHaveBeenCalledTimes(2);
 
-      await processor.stop();
+      // Stop the processor - need to advance timers to let it exit
+      const stopPromise = processor.stop();
+      await vi.advanceTimersByTimeAsync(1000);
+      await stopPromise;
     });
 
-    test('stops collecting statistics after stop', async () => {
-      datastore.statistics.mockResolvedValue({ claimableTaskCount: 1, failedTaskCount: 0 });
-
-      const processor = new SimpleProcessor(
-        datastore,
-        'send-test-task',
-        vi.fn(async () => {}),
-        () => 0,
-        {
-          maxConcurrency: 0,
-          claimIntervalMs: 10,
-          idleIntervalMs: 50,
-          statCollectionIntervalMs: 100,
-        },
-      );
+    test('should start the processor successfully and call handler every idleIntervalMs if datastore does not returns a task', async () => {
+      datastore.claim.mockResolvedValue(undefined);
+      const processor = new SimpleProcessor(datastore, 'test', handler, backoffStrategy, {
+        claimIntervalMs: 10,
+        idleIntervalMs: 1000,
+        taskHandlerTimeoutMs: 10,
+      });
 
       await processor.start();
 
-      await vi.advanceTimersByTimeAsync(100);
-      expect(datastore.statistics).toHaveBeenCalledTimes(1);
+      // First claim happens immediately
+      await vi.advanceTimersByTimeAsync(10);
+      expect(datastore.claim).toHaveBeenCalledTimes(1);
 
-      await processor.stop();
+      // Second claim after idleIntervalMs (1000ms)
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(datastore.claim).toHaveBeenCalledTimes(2);
+      expect(handler).not.toHaveBeenCalled();
 
-      await vi.advanceTimersByTimeAsync(200);
-      expect(datastore.statistics).toHaveBeenCalledTimes(1);
+      // Stop the processor - need to advance timers to let it exit
+      const stopPromise = processor.stop();
+      await vi.advanceTimersByTimeAsync(1000);
+      await stopPromise;
     });
   });
 });

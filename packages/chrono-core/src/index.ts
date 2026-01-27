@@ -7,13 +7,14 @@ export {
 } from './chrono';
 export {
   type ClaimTaskInput,
+  type CollectStatisticsInput,
   type Datastore,
   type DeleteByIdempotencyKeyInput,
   type DeleteInput,
   type DeleteOptions,
   type ScheduleInput,
   type Statistics,
-  type StatisticsInput,
+  type StatisticsCollectorDatastore,
   type Task,
   TaskStatus,
 } from './datastore';
