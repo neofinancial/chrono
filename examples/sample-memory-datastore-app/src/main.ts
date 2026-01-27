@@ -32,12 +32,6 @@ async function main() {
       baseDelayMs: 100,
     },
   });
-  processor1.on(ProcessorEvents.STATISTICS_COLLECTED, ({ statistics }) => {
-    console.log('statistics:', statistics);
-  });
-  processor1.on(ProcessorEvents.STATISTICS_COLLECTED_ERROR, ({ error }) => {
-    console.error('error collecting statistics:', error);
-  });
   processor1.on(ProcessorEvents.TASK_CLAIMED, ({ task }) => {
     console.log('task claimed:', task);
   });
@@ -68,12 +62,6 @@ async function main() {
     },
   });
 
-  processor2.on(ProcessorEvents.STATISTICS_COLLECTED, ({ statistics }) => {
-    console.log('statistics:', statistics);
-  });
-  processor2.on(ProcessorEvents.STATISTICS_COLLECTED_ERROR, ({ error }) => {
-    console.error('error collecting statistics:', error);
-  });
   processor2.on(ProcessorEvents.TASK_CLAIMED, ({ task }) => {
     console.log('task claimed:', task);
   });

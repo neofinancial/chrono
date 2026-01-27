@@ -2,7 +2,6 @@ import { setTimeout } from 'node:timers/promises';
 import { mock } from 'vitest-mock-extended';
 
 import type { Statistics, StatisticsCollectorDatastore } from '../../../src';
-import { StatisticsCollectorEvents } from '../../../src/statistics-collector';
 import { SimpleStatisticsCollector } from '../../../src/statistics-collector/simple-collector';
 
 type TaskMapping = {

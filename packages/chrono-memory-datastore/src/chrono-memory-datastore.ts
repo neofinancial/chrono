@@ -4,7 +4,6 @@ import {
   type DeleteInput,
   type DeleteOptions,
   type ScheduleInput,
-  type Statistics,
   type Task,
   type TaskMappingBase,
   TaskStatus,
