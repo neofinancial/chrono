@@ -21,11 +21,6 @@ export const ProcessorEvents = {
 
 export type ProcessorEvents = (typeof ProcessorEvents)[keyof typeof ProcessorEvents];
 
-export type Statistics = {
-  claimableTaskCount: number;
-  failedTaskCount: number;
-};
-
 export type ProcessorEventsMap<TaskKind extends keyof TaskMapping, TaskMapping extends TaskMappingBase> = {
   [ProcessorEvents.TASK_CLAIMED]: [{ task: Task<TaskKind, TaskMapping[TaskKind]>; claimedAt: Date }];
   [ProcessorEvents.TASK_COMPLETED]: [
@@ -39,6 +34,5 @@ export type ProcessorEventsMap<TaskKind extends keyof TaskMapping, TaskMapping e
     { task: Task<TaskKind, TaskMapping[TaskKind]>; error: unknown; failedAt: Date },
   ];
   [ProcessorEvents.UNKNOWN_PROCESSING_ERROR]: [{ error: unknown; timestamp: Date }];
-  [ProcessorEvents.STATISTICS_COLLECTED]: [{ statistics: Statistics; timestamp: Date }];
   [ProcessorEvents.STATISTICS_COLLECTED_ERROR]: [{ error: unknown; timestamp: Date }];
 };
