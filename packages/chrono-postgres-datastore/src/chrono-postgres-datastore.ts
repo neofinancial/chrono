@@ -122,37 +122,46 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
     await this.getDataSource();
     const manager = this.getManager(input.datastoreOptions);
 
-    try {
-      const entity = manager.create(ChronoTaskEntity, {
-        kind: String(input.kind),
-        status: TaskStatus.PENDING,
-        data: input.data as Record<string, unknown>,
-        priority: input.priority ?? 0,
-        idempotencyKey: input.idempotencyKey ?? null,
-        originalScheduleDate: input.when,
-        scheduledAt: input.when,
-        retryCount: 0,
-      });
+    const entity = manager.create(ChronoTaskEntity, {
+      kind: String(input.kind),
+      status: TaskStatus.PENDING,
+      data: input.data as Record<string, unknown>,
+      priority: input.priority ?? 0,
+      idempotencyKey: input.idempotencyKey ?? null,
+      originalScheduleDate: input.when,
+      scheduledAt: input.when,
+      retryCount: 0,
+    });
 
+    try {
       const saved = await manager.save(ChronoTaskEntity, entity);
       return this.toTask<TaskKind>(saved);
     } catch (error) {
-      // Handle unique constraint violation on idempotency_key
-      if (this.isUniqueViolation(error) && input.idempotencyKey) {
-        const existing = await manager.findOne(ChronoTaskEntity, {
-          where: { idempotencyKey: input.idempotencyKey },
-        });
+      return this.handleScheduleError<TaskKind>(error, input.idempotencyKey, manager);
+    }
+  }
 
-        if (existing) {
-          return this.toTask<TaskKind>(existing);
-        }
-
-        throw new Error(
-          `Failed to find existing task with idempotency key ${input.idempotencyKey} despite unique constraint error`,
-        );
-      }
+  private async handleScheduleError<TaskKind extends keyof TaskMapping>(
+    error: unknown,
+    idempotencyKey: string | undefined,
+    manager: EntityManager,
+  ): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
+    const isIdempotencyConflict = this.isUniqueViolation(error) && idempotencyKey;
+    if (!isIdempotencyConflict) {
       throw error;
     }
+
+    const existing = await manager.findOne(ChronoTaskEntity, {
+      where: { idempotencyKey },
+    });
+
+    if (!existing) {
+      throw new Error(
+        `Failed to find existing task with idempotency key ${idempotencyKey} despite unique constraint error`,
+      );
+    }
+
+    return this.toTask<TaskKind>(existing);
   }
 
   async delete<TaskKind extends Extract<keyof TaskMapping, string>>(
@@ -161,51 +170,50 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined> {
     const dataSource = await this.getDataSource();
     const manager = dataSource.manager;
+
+    const { sql, params, errorMessage } = this.buildDeleteQuery(key, options);
+    const result = await manager.query(sql, params);
+
+    return this.processDeleteResult<TaskKind>(result, options?.force, errorMessage);
+  }
+
+  private buildDeleteQuery<TaskKind extends Extract<keyof TaskMapping, string>>(
+    key: DeleteInput<TaskKind>,
+    options?: DeleteOptions,
+  ): { sql: string; params: unknown[]; errorMessage: string } {
     const tableName = this.config.tableName;
+    const statusClause = options?.force ? '' : "AND status = 'PENDING'";
 
     if (typeof key === 'string') {
-      // Delete by ID
-      const result = await manager.query(
-        `
-        DELETE FROM ${tableName}
-        WHERE id = $1
-          ${options?.force ? '' : "AND status = 'PENDING'"}
-        RETURNING *
-        `,
-        [key],
-      );
-
-      if (result.length === 0) {
-        if (options?.force) {
-          return undefined;
-        }
-        throw new Error(`Task with id ${key} cannot be deleted as it may not exist or it's not in PENDING status.`);
-      }
-
-      return this.toTaskFromRow<TaskKind>(result[0]);
-    } else {
-      // Delete by kind + idempotencyKey
-      const result = await manager.query(
-        `
-        DELETE FROM ${tableName}
-        WHERE kind = $1 AND idempotency_key = $2
-          ${options?.force ? '' : "AND status = 'PENDING'"}
-        RETURNING *
-        `,
-        [String(key.kind), key.idempotencyKey],
-      );
-
-      if (result.length === 0) {
-        if (options?.force) {
-          return undefined;
-        }
-        throw new Error(
-          `Task with kind ${String(key.kind)} and idempotencyKey ${key.idempotencyKey} cannot be deleted as it may not exist or it's not in PENDING status.`,
-        );
-      }
-
-      return this.toTaskFromRow<TaskKind>(result[0]);
+      return {
+        sql: `DELETE FROM ${tableName} WHERE id = $1 ${statusClause} RETURNING *`,
+        params: [key],
+        errorMessage: `Task with id ${key} cannot be deleted as it may not exist or it's not in PENDING status.`,
+      };
     }
+
+    return {
+      sql: `DELETE FROM ${tableName} WHERE kind = $1 AND idempotency_key = $2 ${statusClause} RETURNING *`,
+      params: [String(key.kind), key.idempotencyKey],
+      errorMessage: `Task with kind ${String(key.kind)} and idempotencyKey ${key.idempotencyKey} cannot be deleted as it may not exist or it's not in PENDING status.`,
+    };
+  }
+
+  private processDeleteResult<TaskKind extends keyof TaskMapping>(
+    result: TaskRow[],
+    force: boolean | undefined,
+    errorMessage: string,
+  ): Task<TaskKind, TaskMapping[TaskKind]> | undefined {
+    const [row] = result;
+    if (row) {
+      return this.toTaskFromRow<TaskKind>(row);
+    }
+
+    if (force) {
+      return undefined;
+    }
+
+    throw new Error(errorMessage);
   }
 
   async claim<TaskKind extends Extract<keyof TaskMapping, string>>(
@@ -249,13 +257,9 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
     taskId: string,
     retryAt: Date,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
-    const dataSource = await this.getDataSource();
     const now = new Date();
-    const tableName = this.config.tableName;
-
-    const result = await dataSource.manager.query(
-      `
-      UPDATE ${tableName}
+    const sql = `
+      UPDATE ${this.config.tableName}
       SET status = $1,
           scheduled_at = $2,
           last_executed_at = $3,
@@ -264,58 +268,44 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
           updated_at = $3
       WHERE id = $4
       RETURNING *
-      `,
-      [TaskStatus.PENDING, retryAt, now, taskId],
-    );
-
-    if (result.length === 0) {
-      throw new Error(`Task with ID ${taskId} not found`);
-    }
-
-    return this.toTaskFromRow<TaskKind>(result[0]);
+    `;
+    return this.updateTaskById<TaskKind>(taskId, sql, [TaskStatus.PENDING, retryAt, now, taskId]);
   }
 
   async complete<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
-    const dataSource = await this.getDataSource();
     const now = new Date();
-    const tableName = this.config.tableName;
-
-    const result = await dataSource.manager.query(
-      `
-      UPDATE ${tableName}
+    const sql = `
+      UPDATE ${this.config.tableName}
       SET status = $1,
           completed_at = $2,
           last_executed_at = $2,
           updated_at = $2
       WHERE id = $3
       RETURNING *
-      `,
-      [TaskStatus.COMPLETED, now, taskId],
-    );
-
-    if (result.length === 0) {
-      throw new Error(`Task with ID ${taskId} not found`);
-    }
-
-    return this.toTaskFromRow<TaskKind>(result[0]);
+    `;
+    return this.updateTaskById<TaskKind>(taskId, sql, [TaskStatus.COMPLETED, now, taskId]);
   }
 
   async fail<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
-    const dataSource = await this.getDataSource();
     const now = new Date();
-    const tableName = this.config.tableName;
-
-    const result = await dataSource.manager.query(
-      `
-      UPDATE ${tableName}
+    const sql = `
+      UPDATE ${this.config.tableName}
       SET status = $1,
           last_executed_at = $2,
           updated_at = $2
       WHERE id = $3
       RETURNING *
-      `,
-      [TaskStatus.FAILED, now, taskId],
-    );
+    `;
+    return this.updateTaskById<TaskKind>(taskId, sql, [TaskStatus.FAILED, now, taskId]);
+  }
+
+  private async updateTaskById<TaskKind extends keyof TaskMapping>(
+    taskId: string,
+    sql: string,
+    params: unknown[],
+  ): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
+    const dataSource = await this.getDataSource();
+    const result = await dataSource.manager.query(sql, params);
 
     if (result.length === 0) {
       throw new Error(`Task with ID ${taskId} not found`);
@@ -326,12 +316,11 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
 
   /**
    * Checks if an error is a PostgreSQL unique constraint violation.
-   * Error code 23505 is UNIQUE_VIOLATION in PostgreSQL.
    */
   private isUniqueViolation(error: unknown): boolean {
-    return (
-      typeof error === 'object' && error !== null && 'code' in error && (error as { code: string }).code === '23505'
-    );
+    const PG_UNIQUE_VIOLATION = '23505';
+    const isErrorObject = typeof error === 'object' && error !== null;
+    return isErrorObject && 'code' in error && error.code === PG_UNIQUE_VIOLATION;
   }
 
   /**
