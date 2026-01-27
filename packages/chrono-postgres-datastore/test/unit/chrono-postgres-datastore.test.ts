@@ -1,0 +1,550 @@
+import { PGlite } from '@electric-sql/pglite';
+import { faker } from '@faker-js/faker';
+import { TaskStatus } from '@neofinancial/chrono';
+import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
+
+import { ChronoPostgresDatastore } from '../../src/chrono-postgres-datastore';
+import { TEST_TABLE_NAME } from '../database-setup';
+
+type TaskMapping = {
+  test: {
+    test: string;
+  };
+};
+
+const TEST_CLAIM_STALE_TIMEOUT_MS = 1_000; // 1 second
+
+/**
+ * Creates a mock DataSource that wraps PGlite to provide the interface
+ * expected by ChronoPostgresDatastore
+ */
+function createMockDataSource(pglite: PGlite) {
+  const manager = {
+    query: async (sql: string, params?: unknown[]) => {
+      // Convert $1, $2, etc. to PGlite's parameterized query format
+      const result = await pglite.query(sql, params as any[]);
+      return result.rows;
+    },
+    create: (_entity: any, data: any) => data,
+    save: async (_entity: any, data: any) => {
+      const id = faker.string.uuid();
+      const now = new Date();
+      const result = await pglite.query(
+        `INSERT INTO ${TEST_TABLE_NAME}
+         (id, kind, status, data, priority, idempotency_key, original_schedule_date, scheduled_at, retry_count, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         RETURNING *`,
+        [
+          id,
+          data.kind,
+          data.status,
+          JSON.stringify(data.data),
+          data.priority ?? 0,
+          data.idempotencyKey ?? null,
+          data.originalScheduleDate,
+          data.scheduledAt,
+          data.retryCount ?? 0,
+          now,
+          now,
+        ],
+      );
+      const row = result.rows[0] as any;
+      return {
+        ...row,
+        data: typeof row.data === 'string' ? JSON.parse(row.data) : row.data,
+        idempotencyKey: row.idempotency_key,
+        originalScheduleDate: row.original_schedule_date,
+        scheduledAt: row.scheduled_at,
+        claimedAt: row.claimed_at,
+        completedAt: row.completed_at,
+        lastExecutedAt: row.last_executed_at,
+        retryCount: row.retry_count,
+      };
+    },
+    findOne: async (_entity: any, options: any) => {
+      const where = options.where;
+      let sql = `SELECT * FROM ${TEST_TABLE_NAME} WHERE 1=1`;
+      const params: any[] = [];
+      let paramIndex = 1;
+
+      if (where.id) {
+        sql += ` AND id = $${paramIndex++}`;
+        params.push(where.id);
+      }
+      if (where.idempotencyKey) {
+        sql += ` AND idempotency_key = $${paramIndex++}`;
+        params.push(where.idempotencyKey);
+      }
+      sql += ' LIMIT 1';
+
+      const result = await pglite.query(sql, params);
+      if (result.rows.length === 0) return null;
+
+      const row = result.rows[0] as any;
+      return {
+        ...row,
+        data: typeof row.data === 'string' ? JSON.parse(row.data) : row.data,
+        idempotencyKey: row.idempotency_key,
+        originalScheduleDate: row.original_schedule_date,
+        scheduledAt: row.scheduled_at,
+        claimedAt: row.claimed_at,
+        completedAt: row.completed_at,
+        lastExecutedAt: row.last_executed_at,
+        retryCount: row.retry_count,
+      };
+    },
+    delete: async (_entity: any, _where: any) => {
+      await pglite.query(`DELETE FROM ${TEST_TABLE_NAME}`);
+    },
+  };
+
+  return {
+    manager,
+    isInitialized: true,
+    destroy: async () => {},
+  } as any;
+}
+
+describe('ChronoPostgresDatastore', () => {
+  let pglite: PGlite;
+  let mockDataSource: ReturnType<typeof createMockDataSource>;
+  let dataStore: ChronoPostgresDatastore<TaskMapping>;
+
+  beforeAll(async () => {
+    // Create in-memory PGlite instance
+    pglite = new PGlite();
+
+    // Create the table schema
+    await pglite.exec(`
+      CREATE TABLE IF NOT EXISTS ${TEST_TABLE_NAME} (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        kind VARCHAR(255) NOT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+        data JSONB NOT NULL,
+        priority INTEGER DEFAULT 0,
+        idempotency_key VARCHAR(255),
+        original_schedule_date TIMESTAMP WITH TIME ZONE NOT NULL,
+        scheduled_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        claimed_at TIMESTAMP WITH TIME ZONE,
+        completed_at TIMESTAMP WITH TIME ZONE,
+        last_executed_at TIMESTAMP WITH TIME ZONE,
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    // Create indexes
+    await pglite.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_chrono_tasks_idempotency_key
+      ON ${TEST_TABLE_NAME} (idempotency_key)
+      WHERE idempotency_key IS NOT NULL
+    `);
+
+    mockDataSource = createMockDataSource(pglite);
+
+    dataStore = new ChronoPostgresDatastore({
+      tableName: TEST_TABLE_NAME,
+    });
+
+    await dataStore.initialize(mockDataSource);
+  });
+
+  beforeEach(async () => {
+    await pglite.exec(`DELETE FROM ${TEST_TABLE_NAME}`);
+  });
+
+  afterAll(async () => {
+    await pglite.close();
+  });
+
+  describe('initialize', () => {
+    test('should throw an error if the DataSource is already set', async () => {
+      await expect(() => dataStore.initialize(mockDataSource)).rejects.toThrow('DataSource already initialized');
+    });
+  });
+
+  describe('schedule', () => {
+    const input = {
+      kind: 'test' as const,
+      data: { test: 'test' },
+      priority: 1,
+      when: new Date(),
+    };
+
+    describe('when called with valid input', () => {
+      test('should return task with correct properties', async () => {
+        const task = await dataStore.schedule(input);
+
+        expect(task).toEqual(
+          expect.objectContaining({
+            kind: input.kind,
+            status: 'PENDING',
+            data: input.data,
+            priority: input.priority,
+            originalScheduleDate: expect.any(Date),
+            scheduledAt: expect.any(Date),
+            id: expect.any(String),
+            retryCount: 0,
+          }),
+        );
+      });
+
+      test('should store task in the database', async () => {
+        const task = await dataStore.schedule(input);
+
+        const result = await pglite.query(`SELECT * FROM ${TEST_TABLE_NAME} WHERE id = $1`, [task.id]);
+
+        expect(result.rows.length).toBe(1);
+        expect(result.rows[0]).toEqual(
+          expect.objectContaining({
+            kind: input.kind,
+            status: 'PENDING',
+          }),
+        );
+      });
+    });
+
+    describe('idempotency', () => {
+      test('should return existing task if one exists with same idempotency key', async () => {
+        const idempotencyKey = faker.string.uuid();
+        const inputWithIdempotency = {
+          kind: 'test' as const,
+          data: { test: 'test' },
+          priority: 1,
+          when: new Date(),
+          idempotencyKey,
+        };
+
+        const task1 = await dataStore.schedule(inputWithIdempotency);
+        const task2 = await dataStore.schedule(inputWithIdempotency);
+
+        expect(task1.id).toEqual(task2.id);
+        expect(task1.idempotencyKey).toEqual(task2.idempotencyKey);
+      });
+    });
+  });
+
+  describe('claim', () => {
+    const input = {
+      kind: 'test' as const,
+      data: { test: 'test' },
+      priority: 1,
+      when: new Date(Date.now() - 1),
+    };
+
+    test('should return undefined when no tasks available', async () => {
+      const result = await dataStore.claim({
+        kind: input.kind,
+        claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS,
+      });
+
+      expect(result).toBeUndefined();
+    });
+
+    test('should claim task in PENDING state with scheduledAt in the past', async () => {
+      const task = await dataStore.schedule({
+        ...input,
+        when: new Date(Date.now() - 1000),
+      });
+
+      const claimedTask = await dataStore.claim({
+        kind: input.kind,
+        claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS,
+      });
+
+      expect(claimedTask).toEqual(
+        expect.objectContaining({
+          id: task.id,
+          kind: task.kind,
+          status: 'CLAIMED',
+        }),
+      );
+    });
+
+    test('should claim task in CLAIMED state with claimedAt in the past (stale)', async () => {
+      const scheduledTask = await dataStore.schedule(input);
+
+      const claimedTask = await dataStore.claim({
+        kind: input.kind,
+        claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS,
+      });
+
+      // Trying to claim again should return undefined (no stale tasks)
+      const claimedTaskAgain = await dataStore.claim({
+        kind: input.kind,
+        claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS,
+      });
+
+      // Fast forward time to make the claim stale
+      const fakeTimer = vi.useFakeTimers();
+      fakeTimer.setSystemTime(
+        new Date((claimedTask?.claimedAt?.getTime() as number) + TEST_CLAIM_STALE_TIMEOUT_MS + 1),
+      );
+
+      const claimedTaskAgainAgain = await dataStore.claim({
+        kind: input.kind,
+        claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS,
+      });
+      fakeTimer.useRealTimers();
+
+      expect(scheduledTask).toEqual(
+        expect.objectContaining({
+          status: TaskStatus.PENDING,
+        }),
+      );
+      expect(claimedTask).toEqual(
+        expect.objectContaining({
+          id: scheduledTask.id,
+          kind: scheduledTask.kind,
+          status: TaskStatus.CLAIMED,
+        }),
+      );
+      expect(claimedTaskAgain).toBeUndefined();
+      expect(claimedTaskAgainAgain).toEqual(
+        expect.objectContaining({
+          id: scheduledTask.id,
+          kind: scheduledTask.kind,
+          status: TaskStatus.CLAIMED,
+        }),
+      );
+    });
+
+    test('should claim tasks in priority order (higher priority first)', async () => {
+      const lowPriorityTask = await dataStore.schedule({
+        ...input,
+        priority: 1,
+      });
+      const highPriorityTask = await dataStore.schedule({
+        ...input,
+        priority: 10,
+      });
+
+      const firstClaimed = await dataStore.claim({
+        kind: input.kind,
+        claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS,
+      });
+
+      expect(firstClaimed?.id).toEqual(highPriorityTask.id);
+
+      const secondClaimed = await dataStore.claim({
+        kind: input.kind,
+        claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS,
+      });
+
+      expect(secondClaimed?.id).toEqual(lowPriorityTask.id);
+    });
+  });
+
+  describe('complete', () => {
+    test('should mark task as completed', async () => {
+      const task = await dataStore.schedule({
+        kind: 'test',
+        data: { test: 'test' },
+        priority: 1,
+        when: new Date(),
+      });
+
+      const completedTask = await dataStore.complete(task.id);
+
+      expect(completedTask).toEqual(
+        expect.objectContaining({
+          id: task.id,
+          kind: task.kind,
+          status: TaskStatus.COMPLETED,
+          completedAt: expect.any(Date),
+        }),
+      );
+
+      // Verify in database
+      const result = await pglite.query(`SELECT * FROM ${TEST_TABLE_NAME} WHERE id = $1`, [task.id]);
+      expect(result.rows[0]).toEqual(
+        expect.objectContaining({
+          status: TaskStatus.COMPLETED,
+        }),
+      );
+    });
+
+    test('should throw an error if task is not found', async () => {
+      const taskId = faker.string.uuid();
+
+      await expect(() => dataStore.complete(taskId)).rejects.toThrow(`Task with ID ${taskId} not found`);
+    });
+  });
+
+  describe('fail', () => {
+    test('should mark task as failed', async () => {
+      const task = await dataStore.schedule({
+        kind: 'test',
+        data: { test: 'test' },
+        priority: 1,
+        when: new Date(),
+      });
+
+      const failedTask = await dataStore.fail(task.id);
+
+      expect(failedTask).toEqual(
+        expect.objectContaining({
+          id: task.id,
+          kind: task.kind,
+          status: TaskStatus.FAILED,
+        }),
+      );
+
+      // Verify in database
+      const result = await pglite.query(`SELECT * FROM ${TEST_TABLE_NAME} WHERE id = $1`, [task.id]);
+      expect(result.rows[0]).toEqual(
+        expect.objectContaining({
+          status: TaskStatus.FAILED,
+        }),
+      );
+    });
+
+    test('should throw an error if task is not found', async () => {
+      const taskId = faker.string.uuid();
+
+      await expect(() => dataStore.fail(taskId)).rejects.toThrow(`Task with ID ${taskId} not found`);
+    });
+  });
+
+  describe('retry', () => {
+    test('should retry task', async () => {
+      const firstScheduleDate = faker.date.past();
+      const secondScheduleDate = faker.date.future();
+
+      const task = await dataStore.schedule({
+        kind: 'test',
+        data: { test: 'test' },
+        priority: 1,
+        when: firstScheduleDate,
+      });
+
+      expect(task).toEqual(
+        expect.objectContaining({
+          status: TaskStatus.PENDING,
+          retryCount: 0,
+        }),
+      );
+
+      const taskToRetry = await dataStore.retry(task.id, secondScheduleDate);
+
+      expect(taskToRetry).toEqual(
+        expect.objectContaining({
+          id: task.id,
+          kind: task.kind,
+          status: TaskStatus.PENDING,
+          retryCount: 1,
+        }),
+      );
+
+      // Verify scheduledAt was updated
+      expect(taskToRetry.scheduledAt.getTime()).toBeCloseTo(secondScheduleDate.getTime(), -3);
+      // Verify originalScheduleDate was preserved
+      expect(taskToRetry.originalScheduleDate.getTime()).toBeCloseTo(firstScheduleDate.getTime(), -3);
+    });
+
+    test('should throw an error if task is not found', async () => {
+      const taskId = faker.string.uuid();
+
+      await expect(() => dataStore.retry(taskId, new Date())).rejects.toThrow(`Task with ID ${taskId} not found`);
+    });
+  });
+
+  describe('delete', () => {
+    test('deletes task by id removing from datastore', async () => {
+      const when = new Date();
+
+      const task = await dataStore.schedule({
+        kind: 'test',
+        data: { test: 'test' },
+        priority: 1,
+        when,
+      });
+
+      await dataStore.delete(task.id);
+
+      const result = await pglite.query(`SELECT * FROM ${TEST_TABLE_NAME} WHERE id = $1`, [task.id]);
+      expect(result.rows.length).toBe(0);
+    });
+
+    test('deletes task by task kind and idempotency key removing from datastore', async () => {
+      const when = new Date();
+
+      const task = await dataStore.schedule({
+        idempotencyKey: 'test-idempotency-key',
+        kind: 'test',
+        data: { test: 'test' },
+        priority: 1,
+        when,
+      });
+
+      await dataStore.delete({ kind: task.kind, idempotencyKey: task.idempotencyKey ?? 'undefined' });
+
+      const result = await pglite.query(`SELECT * FROM ${TEST_TABLE_NAME} WHERE id = $1`, [task.id]);
+      expect(result.rows.length).toBe(0);
+    });
+
+    test('returns deleted task', async () => {
+      const when = new Date();
+
+      const task = await dataStore.schedule({
+        kind: 'test',
+        data: { test: 'test' },
+        priority: 1,
+        when,
+      });
+
+      const deletedTask = await dataStore.delete(task.id);
+
+      expect(deletedTask?.id).toEqual(task.id);
+      expect(deletedTask?.kind).toEqual(task.kind);
+    });
+
+    test('throws when attempting to delete a task that is not PENDING', async () => {
+      const when = new Date(Date.now() - 1000);
+
+      const task = await dataStore.schedule({
+        kind: 'test',
+        data: { test: 'test' },
+        priority: 1,
+        when,
+      });
+
+      await dataStore.claim({ kind: task.kind, claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS });
+
+      await expect(dataStore.delete(task.id)).rejects.toThrow(
+        `Task with id ${task.id} cannot be deleted as it may not exist or it's not in PENDING status.`,
+      );
+    });
+
+    test('force deletes non-PENDING task removing from datastore', async () => {
+      const when = new Date(Date.now() - 1000);
+
+      const task = await dataStore.schedule({
+        kind: 'test',
+        data: { test: 'test' },
+        priority: 1,
+        when,
+      });
+
+      await dataStore.claim({ kind: task.kind, claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS });
+
+      await dataStore.delete(task.id, { force: true });
+
+      const result = await pglite.query(`SELECT * FROM ${TEST_TABLE_NAME} WHERE id = $1`, [task.id]);
+      expect(result.rows.length).toBe(0);
+    });
+
+    test('noops when force deleting a task that does not exist', async () => {
+      const result = await dataStore.delete(faker.string.uuid(), { force: true });
+      expect(result).toBeUndefined();
+    });
+  });
+
+  describe('getEntity', () => {
+    test('should return the ChronoTaskEntity class', () => {
+      const entity = ChronoPostgresDatastore.getEntity();
+      expect(entity.name).toBe('ChronoTaskEntity');
+    });
+  });
+});
