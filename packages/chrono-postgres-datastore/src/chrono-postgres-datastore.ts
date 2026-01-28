@@ -278,7 +278,7 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
         status: TaskStatus.PENDING,
         scheduledAt: retryAt,
         lastExecutedAt: now,
-        claimedAt: () => 'NULL',
+        claimedAt: null,
         updatedAt: now,
         retryCount: () => 'retry_count + 1',
       })
