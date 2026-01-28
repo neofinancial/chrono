@@ -11,8 +11,23 @@ import {
 import { Brackets, type DataSource, type EntityManager } from 'typeorm';
 import { ChronoTaskEntity } from './chrono-task.entity';
 
-/** @deprecated Config is no longer used - table name is determined by the entity */
-export type ChronoPostgresDatastoreConfig = Record<string, never>;
+const DEFAULT_TTL_SECONDS = 60 * 60 * 24 * 30;
+const DEFAULT_CLEANUP_INTERVAL_SECONDS = 60;
+const DEFAULT_CLEANUP_BATCH_SIZE = 100;
+
+export type ChronoPostgresDatastoreConfig = {
+  /** TTL (in seconds) for completed tasks. Tasks older than this are deleted during cleanup. */
+  completedDocumentTTLSeconds?: number;
+
+  /** How often (in seconds) to attempt cleanup. Runs opportunistically after claim() calls. */
+  cleanupIntervalSeconds?: number;
+
+  /** Max completed tasks to delete per cleanup run. */
+  cleanupBatchSize?: number;
+
+  /** Called when cleanup fails. Use this to report errors to Sentry, logging, etc. */
+  onCleanupError?: (error: unknown) => void;
+};
 
 export type PostgresDatastoreOptions = {
   /**
@@ -22,11 +37,25 @@ export type PostgresDatastoreOptions = {
   entityManager?: EntityManager;
 };
 
+type ResolvedConfig = Required<Omit<ChronoPostgresDatastoreConfig, 'onCleanupError'>> &
+  Pick<ChronoPostgresDatastoreConfig, 'onCleanupError'>;
+
 export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
   implements Datastore<TaskMapping, PostgresDatastoreOptions>
 {
+  private config: ResolvedConfig;
   private dataSource: DataSource | undefined;
   private dataSourceResolvers: Array<(ds: DataSource) => void> = [];
+  private lastCleanupTime: Date = new Date(0);
+
+  constructor(config?: ChronoPostgresDatastoreConfig) {
+    this.config = {
+      completedDocumentTTLSeconds: config?.completedDocumentTTLSeconds ?? DEFAULT_TTL_SECONDS,
+      cleanupIntervalSeconds: config?.cleanupIntervalSeconds ?? DEFAULT_CLEANUP_INTERVAL_SECONDS,
+      cleanupBatchSize: config?.cleanupBatchSize ?? DEFAULT_CLEANUP_BATCH_SIZE,
+      onCleanupError: config?.onCleanupError,
+    };
+  }
 
   /**
    * Initializes the datastore with a TypeORM DataSource.
@@ -186,7 +215,7 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
     const staleThreshold = new Date(now.getTime() - input.claimStaleTimeoutMs);
 
     // Use a transaction to atomically select and update
-    return dataSource.transaction(async (manager) => {
+    const result = await dataSource.transaction(async (manager) => {
       // Find and lock the next claimable task
       const taskToClaimQuery = manager
         .createQueryBuilder(ChronoTaskEntity, 'task')
@@ -227,6 +256,11 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
       const [claimedTask] = updateResult.raw as ChronoTaskEntity[];
       return claimedTask ? this.toTask<TaskKind>(claimedTask) : undefined;
     });
+
+    // Opportunistic cleanup runs after claim completes, outside the transaction
+    this.maybeCleanupCompletedTasks();
+
+    return result;
   }
 
   async retry<TaskKind extends keyof TaskMapping>(
@@ -331,5 +365,54 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
       lastExecutedAt: entity.lastExecutedAt ?? undefined,
       retryCount: entity.retryCount,
     };
+  }
+
+  /**
+   * Opportunistically cleans up old completed tasks.
+   * Runs in the background (fire-and-forget) to avoid blocking claim().
+   * Multiple instances may race; this is harmless as DELETE is idempotent.
+   */
+  private maybeCleanupCompletedTasks(): void {
+    const now = new Date();
+    const timeSinceLastCleanup = now.getTime() - this.lastCleanupTime.getTime();
+
+    if (timeSinceLastCleanup < this.config.cleanupIntervalSeconds * 1000) {
+      return;
+    }
+
+    // Update timestamp before cleanup to prevent concurrent cleanup attempts from this instance
+    this.lastCleanupTime = now;
+
+    this.cleanupCompletedTasks().catch((error) => {
+      this.config.onCleanupError?.(error);
+    });
+  }
+
+  private async cleanupCompletedTasks(): Promise<void> {
+    if (!this.dataSource) {
+      return;
+    }
+
+    const cutoffDate = new Date(Date.now() - this.config.completedDocumentTTLSeconds * 1000);
+
+    // Two-step cleanup: SELECT with LIMIT, then DELETE by IDs
+    const tasksToDelete = await this.dataSource
+      .createQueryBuilder(ChronoTaskEntity, 'task')
+      .select('task.id')
+      .where('task.status = :status', { status: TaskStatus.COMPLETED })
+      .andWhere('task.completedAt < :cutoffDate', { cutoffDate })
+      .limit(this.config.cleanupBatchSize)
+      .getMany();
+
+    if (tasksToDelete.length === 0) {
+      return;
+    }
+
+    await this.dataSource
+      .createQueryBuilder()
+      .delete()
+      .from(ChronoTaskEntity)
+      .whereInIds(tasksToDelete.map((t) => t.id))
+      .execute();
   }
 }

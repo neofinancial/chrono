@@ -2,6 +2,8 @@ import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, Update
 
 @Entity('chrono_tasks')
 @Index('idx_chrono_tasks_claim', ['kind', 'status', 'scheduledAt', 'priority', 'claimedAt'])
+@Index('idx_chrono_tasks_cleanup', ['status', 'completedAt'])
+@Index('idx_chrono_tasks_idempotency', ['idempotencyKey'], { unique: true, where: '"idempotency_key" IS NOT NULL' })
 export class ChronoTaskEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;

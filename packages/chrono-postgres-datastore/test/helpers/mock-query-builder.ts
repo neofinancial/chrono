@@ -52,6 +52,9 @@ export function createMockQueryBuilder(pglite: PGlite) {
   let orderByClauses: OrderByClause[] = [];
   let includeReturning = false;
   let lockMode: string | undefined;
+  let limitValue: number | undefined;
+  let selectColumns: string[] = ['*'];
+  let whereInIdsValues: string[] = [];
 
   // WHERE clause builder
   const whereBuilder = new WhereClauseCollection(tableAlias);
@@ -62,8 +65,11 @@ export function createMockQueryBuilder(pglite: PGlite) {
     // Operation Type Methods
     // ─────────────────────────────────────────────────────────────────
 
-    select() {
+    select(columns?: string | string[]) {
       operation = 'select';
+      if (columns) {
+        selectColumns = Array.isArray(columns) ? columns : [columns];
+      }
       return queryBuilder;
     },
 
@@ -141,6 +147,14 @@ export function createMockQueryBuilder(pglite: PGlite) {
       return queryBuilder;
     },
 
+    /**
+     * Adds a WHERE IN condition for IDs.
+     */
+    whereInIds(ids: string[]) {
+      whereInIdsValues = ids;
+      return queryBuilder;
+    },
+
     // ─────────────────────────────────────────────────────────────────
     // UPDATE Methods
     // ─────────────────────────────────────────────────────────────────
@@ -177,10 +191,10 @@ export function createMockQueryBuilder(pglite: PGlite) {
     },
 
     /**
-     * Sets a LIMIT (stored but always uses LIMIT 1 for getOne).
+     * Sets a LIMIT for the query.
      */
-    limit(_limit: number) {
-      // We always use LIMIT 1 for getOne queries
+    limit(limit: number) {
+      limitValue = limit;
       return queryBuilder;
     },
 
@@ -208,7 +222,7 @@ export function createMockQueryBuilder(pglite: PGlite) {
      * Executes a SELECT query and returns at most one result.
      */
     async getOne(): Promise<ChronoTaskEntity | null> {
-      const sql = buildSelectSql();
+      const sql = buildSelectSql(1);
       const { values } = whereBuilder.build();
 
       const result = await pglite.query(sql, values);
@@ -218,6 +232,18 @@ export function createMockQueryBuilder(pglite: PGlite) {
       }
 
       return mapRowToEntity(result.rows[0] as Record<string, unknown>);
+    },
+
+    /**
+     * Executes a SELECT query and returns all matching results (respects limit).
+     */
+    async getMany(): Promise<ChronoTaskEntity[]> {
+      const sql = buildSelectSql(limitValue);
+      const { values } = whereBuilder.build();
+
+      const result = await pglite.query(sql, values);
+
+      return (result.rows as Record<string, unknown>[]).map(mapRowToEntity);
     },
 
     /**
@@ -243,10 +269,20 @@ export function createMockQueryBuilder(pglite: PGlite) {
   /**
    * Builds a SELECT SQL statement with all clauses.
    */
-  function buildSelectSql(): string {
+  function buildSelectSql(limit?: number): string {
     const { sql: whereClause } = whereBuilder.build();
 
-    let sql = `SELECT * FROM ${TEST_TABLE_NAME}`;
+    // Build column list from selectColumns
+    const columns = selectColumns
+      .map((col) => {
+        if (col === '*') return '*';
+        // Remove alias prefix (e.g., 'task.id' -> 'id')
+        const cleanCol = removeAliasPrefix(col, tableAlias);
+        return toSnakeCase(cleanCol);
+      })
+      .join(', ');
+
+    let sql = `SELECT ${columns} FROM ${TEST_TABLE_NAME}`;
 
     if (whereClause) {
       sql += ` WHERE ${whereClause}`;
@@ -260,7 +296,9 @@ export function createMockQueryBuilder(pglite: PGlite) {
       sql += ` ORDER BY ${orderByParts.join(', ')}`;
     }
 
-    sql += ' LIMIT 1';
+    if (limit !== undefined) {
+      sql += ` LIMIT ${limit}`;
+    }
 
     if (lockMode) {
       sql += ' FOR UPDATE SKIP LOCKED';
@@ -276,8 +314,14 @@ export function createMockQueryBuilder(pglite: PGlite) {
     const { sql: whereClause, values: whereValues } = whereBuilder.build();
 
     let sql = `DELETE FROM ${TEST_TABLE_NAME}`;
+    let values = whereValues;
 
-    if (whereClause) {
+    if (whereInIdsValues.length > 0) {
+      // Handle whereInIds - create parameterized IN clause
+      const placeholders = whereInIdsValues.map((_, i) => `$${i + 1}`).join(', ');
+      sql += ` WHERE id IN (${placeholders})`;
+      values = whereInIdsValues;
+    } else if (whereClause) {
       sql += ` WHERE ${whereClause}`;
     }
 
@@ -285,7 +329,7 @@ export function createMockQueryBuilder(pglite: PGlite) {
       sql += ' RETURNING *';
     }
 
-    const result = await pglite.query(sql, whereValues);
+    const result = await pglite.query(sql, values);
     const entities = (result.rows as Record<string, unknown>[]).map(mapRowToEntity);
 
     return { raw: entities, affected: result.rows.length };

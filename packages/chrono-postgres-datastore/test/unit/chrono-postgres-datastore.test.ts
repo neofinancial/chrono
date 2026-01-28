@@ -457,4 +457,195 @@ describe('ChronoPostgresDatastore', () => {
       expect(entity.name).toBe('ChronoTaskEntity');
     });
   });
+
+  describe('cleanup', () => {
+    // Helper to wait for fire-and-forget cleanup to complete
+    const waitForCleanup = () => new Promise((resolve) => setTimeout(resolve, 50));
+
+    test('should delete completed tasks older than TTL after claim', async () => {
+      const ds = new ChronoPostgresDatastore<TaskMapping>({
+        completedDocumentTTLSeconds: 1,
+        cleanupIntervalSeconds: 0,
+      });
+      await ds.initialize(mockDataSource as unknown as Parameters<typeof ds.initialize>[0]);
+
+      // Create a task and complete it
+      const task = await ds.schedule({
+        kind: 'test',
+        data: { test: 'test' },
+        priority: 1,
+        when: new Date(Date.now() - 1000),
+      });
+      await ds.complete(task.id);
+
+      // Backdate completed_at to be older than TTL
+      await pglite.exec(
+        `UPDATE ${TEST_TABLE_NAME} SET completed_at = NOW() - INTERVAL '2 seconds' WHERE id = '${task.id}'`,
+      );
+
+      // Trigger cleanup via claim
+      await ds.claim({ kind: 'test', claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS });
+      await waitForCleanup();
+
+      const result = await pglite.query(`SELECT * FROM ${TEST_TABLE_NAME} WHERE id = $1`, [task.id]);
+      expect(result.rows.length).toBe(0);
+    });
+
+    test('should not delete completed tasks newer than TTL', async () => {
+      const ds = new ChronoPostgresDatastore<TaskMapping>({
+        completedDocumentTTLSeconds: 3600,
+        cleanupIntervalSeconds: 0,
+      });
+      await ds.initialize(mockDataSource as unknown as Parameters<typeof ds.initialize>[0]);
+
+      const task = await ds.schedule({
+        kind: 'test',
+        data: { test: 'test' },
+        priority: 1,
+        when: new Date(Date.now() - 1000),
+      });
+      await ds.complete(task.id);
+
+      // Trigger cleanup via claim - task should NOT be deleted (completed just now)
+      await ds.claim({ kind: 'test', claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS });
+      await waitForCleanup();
+
+      const result = await pglite.query(`SELECT * FROM ${TEST_TABLE_NAME} WHERE id = $1`, [task.id]);
+      expect(result.rows.length).toBe(1);
+    });
+
+    test('should respect cleanup interval', async () => {
+      const ds = new ChronoPostgresDatastore<TaskMapping>({
+        completedDocumentTTLSeconds: 1,
+        cleanupIntervalSeconds: 3600,
+      });
+      await ds.initialize(mockDataSource as unknown as Parameters<typeof ds.initialize>[0]);
+
+      // Create and complete first task
+      const task1 = await ds.schedule({
+        kind: 'test',
+        data: { test: 'test1' },
+        priority: 1,
+        when: new Date(Date.now() - 1000),
+      });
+      await ds.complete(task1.id);
+
+      // Backdate to be older than TTL
+      await pglite.exec(
+        `UPDATE ${TEST_TABLE_NAME} SET completed_at = NOW() - INTERVAL '2 seconds' WHERE id = '${task1.id}'`,
+      );
+
+      // First claim triggers cleanup (interval starts at epoch)
+      await ds.claim({ kind: 'test', claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS });
+      await waitForCleanup();
+
+      const result1 = await pglite.query(`SELECT * FROM ${TEST_TABLE_NAME} WHERE id = $1`, [task1.id]);
+      expect(result1.rows.length).toBe(0);
+
+      // Create and complete second task
+      const task2 = await ds.schedule({
+        kind: 'test',
+        data: { test: 'test2' },
+        priority: 1,
+        when: new Date(Date.now() - 1000),
+      });
+      await ds.complete(task2.id);
+
+      // Backdate to be older than TTL
+      await pglite.exec(
+        `UPDATE ${TEST_TABLE_NAME} SET completed_at = NOW() - INTERVAL '2 seconds' WHERE id = '${task2.id}'`,
+      );
+
+      // Second claim should NOT trigger cleanup (interval not passed)
+      await ds.claim({ kind: 'test', claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS });
+      await waitForCleanup();
+
+      // task2 should still exist because cleanup interval hasn't passed
+      const result2 = await pglite.query(`SELECT * FROM ${TEST_TABLE_NAME} WHERE id = $1`, [task2.id]);
+      expect(result2.rows.length).toBe(1);
+    });
+
+    test('should call onCleanupError when cleanup fails', async () => {
+      const onCleanupError = vi.fn();
+
+      // Create a datasource that works for claim but fails during cleanup's SELECT
+      const failingCleanupDataSource = {
+        ...mockDataSource,
+        createQueryBuilder: (...args: unknown[]) => {
+          const qb = mockDataSource.createQueryBuilder(...args);
+          // If called with entity and alias (cleanup SELECT), make getMany fail
+          if (args.length === 2) {
+            return {
+              ...qb,
+              select: () => ({
+                where: () => ({
+                  andWhere: () => ({
+                    limit: () => ({
+                      getMany: () => Promise.reject(new Error('Cleanup failed')),
+                    }),
+                  }),
+                }),
+              }),
+            };
+          }
+          return qb;
+        },
+      };
+
+      const ds = new ChronoPostgresDatastore<TaskMapping>({
+        cleanupIntervalSeconds: 0,
+        onCleanupError,
+      });
+      await ds.initialize(failingCleanupDataSource as unknown as Parameters<typeof ds.initialize>[0]);
+
+      // Schedule task using the main datastore (shares same pglite)
+      await dataStore.schedule({
+        kind: 'test',
+        data: { test: 'test' },
+        priority: 1,
+        when: new Date(Date.now() - 1000),
+      });
+
+      // Trigger cleanup via claim
+      await ds.claim({ kind: 'test', claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS });
+      await waitForCleanup();
+
+      expect(onCleanupError).toHaveBeenCalledWith(expect.any(Error));
+      expect((onCleanupError.mock.calls[0][0] as Error).message).toBe('Cleanup failed');
+    });
+
+    test('should respect cleanup batch size', async () => {
+      const ds = new ChronoPostgresDatastore<TaskMapping>({
+        completedDocumentTTLSeconds: 1,
+        cleanupIntervalSeconds: 0,
+        cleanupBatchSize: 2,
+      });
+      await ds.initialize(mockDataSource as unknown as Parameters<typeof ds.initialize>[0]);
+
+      // Create and complete 3 tasks
+      const tasks = await Promise.all(
+        [1, 2, 3].map((i) =>
+          ds.schedule({
+            kind: 'test',
+            data: { test: `test${i}` },
+            priority: 1,
+            when: new Date(Date.now() - 1000),
+          }),
+        ),
+      );
+      await Promise.all(tasks.map((t) => ds.complete(t.id)));
+
+      // Backdate all tasks to be older than TTL
+      await pglite.exec(
+        `UPDATE ${TEST_TABLE_NAME} SET completed_at = NOW() - INTERVAL '2 seconds' WHERE status = '${TaskStatus.COMPLETED}'`,
+      );
+
+      // Trigger cleanup - should only delete 2 tasks (batch size)
+      await ds.claim({ kind: 'test', claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS });
+      await waitForCleanup();
+
+      const result = await pglite.query(`SELECT * FROM ${TEST_TABLE_NAME} WHERE status = $1`, [TaskStatus.COMPLETED]);
+      expect(result.rows.length).toBe(1);
+    });
+  });
 });
