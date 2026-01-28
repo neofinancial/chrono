@@ -45,6 +45,27 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
 
       await expect(ds.initialize(dataSource)).rejects.toThrow('DataSource already initialized');
     });
+
+    test('operations wait for deferred initialization', async () => {
+      const ds = new ChronoPostgresDatastore<TaskMapping>();
+
+      // Start scheduling before initialization - it should wait
+      const schedulePromise = ds.schedule({
+        kind: 'test',
+        data: { value: 'deferred' },
+        priority: 1,
+        when: new Date(),
+      });
+
+      // Initialize after a small delay
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      await ds.initialize(dataSource);
+
+      // The schedule should complete successfully
+      const task = await schedulePromise;
+      expect(task.id).toBeDefined();
+      expect(task.data).toEqual({ value: 'deferred' });
+    });
   });
 
   describe('schedule', () => {
@@ -123,6 +144,35 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
           idempotencyKey: 'shared-key',
         }),
       ).resolves.toMatchObject({ id: task1.id });
+    });
+
+    test('uses provided entityManager for transaction participation', async () => {
+      let taskId: string | undefined;
+
+      // Start a transaction, schedule a task, then rollback
+      await dataSource
+        .transaction(async (entityManager) => {
+          const task = await dataStore.schedule({
+            kind: 'test',
+            data: { value: 'transactional' },
+            priority: 1,
+            when: new Date(),
+            datastoreOptions: { entityManager },
+          });
+          taskId = task.id;
+
+          // Task should be visible within the transaction
+          const found = await entityManager.findOne(ChronoTaskEntity, { where: { id: taskId } });
+          expect(found).not.toBeNull();
+
+          // Rollback by throwing
+          throw new Error('Rollback');
+        })
+        .catch(() => {});
+
+      // Task should not exist after rollback
+      const found = await dataSource.getRepository(ChronoTaskEntity).findOneBy({ id: taskId! });
+      expect(found).toBeNull();
     });
   });
 
@@ -232,6 +282,86 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
       const claimed = await dataStore.claim({ kind: 'test', claimStaleTimeoutMs: 1000 });
       expect(claimed).toBeUndefined();
     });
+
+    test('does not claim completed tasks', async () => {
+      const task = await dataStore.schedule({
+        kind: 'test',
+        data: { value: 'completed' },
+        priority: 1,
+        when: new Date(Date.now() - 1000),
+      });
+      await dataStore.complete(task.id);
+
+      const claimed = await dataStore.claim({ kind: 'test', claimStaleTimeoutMs: 1000 });
+      expect(claimed).toBeUndefined();
+    });
+
+    test('does not claim failed tasks', async () => {
+      const task = await dataStore.schedule({
+        kind: 'test',
+        data: { value: 'failed' },
+        priority: 1,
+        when: new Date(Date.now() - 1000),
+      });
+      await dataStore.fail(task.id);
+
+      const claimed = await dataStore.claim({ kind: 'test', claimStaleTimeoutMs: 1000 });
+      expect(claimed).toBeUndefined();
+    });
+
+    test('does not claim non-stale claimed task', async () => {
+      const task = await dataStore.schedule({
+        kind: 'test',
+        data: { value: 'claimed' },
+        priority: 1,
+        when: new Date(Date.now() - 1000),
+      });
+
+      // First claim succeeds
+      const first = await dataStore.claim({ kind: 'test', claimStaleTimeoutMs: 60000 });
+      expect(first!.id).toBe(task.id);
+
+      // Second claim should return undefined (task is claimed but not stale)
+      const second = await dataStore.claim({ kind: 'test', claimStaleTimeoutMs: 60000 });
+      expect(second).toBeUndefined();
+    });
+
+    test('concurrent claims get different tasks (SKIP LOCKED)', async () => {
+      // Create multiple tasks
+      const tasks = await Promise.all(
+        [1, 2, 3, 4, 5].map((i) =>
+          dataStore.schedule({
+            kind: 'test',
+            data: { value: `task-${i}` },
+            priority: 1,
+            when: new Date(Date.now() - 1000),
+          }),
+        ),
+      );
+
+      // Claim all tasks concurrently
+      const claims = await Promise.all([
+        dataStore.claim({ kind: 'test', claimStaleTimeoutMs: 60000 }),
+        dataStore.claim({ kind: 'test', claimStaleTimeoutMs: 60000 }),
+        dataStore.claim({ kind: 'test', claimStaleTimeoutMs: 60000 }),
+        dataStore.claim({ kind: 'test', claimStaleTimeoutMs: 60000 }),
+        dataStore.claim({ kind: 'test', claimStaleTimeoutMs: 60000 }),
+      ]);
+
+      // All claims should succeed
+      const claimedIds = claims.map((c) => c!.id);
+      expect(claimedIds).toHaveLength(5);
+
+      // All claimed IDs should be unique (no duplicates)
+      const uniqueIds = new Set(claimedIds);
+      expect(uniqueIds.size).toBe(5);
+
+      // All claimed IDs should be from our created tasks
+      const taskIds = new Set(tasks.map((t) => t.id));
+      for (const id of claimedIds) {
+        expect(taskIds.has(id)).toBe(true);
+      }
+    });
   });
 
   describe('complete', () => {
@@ -323,6 +453,27 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
       const fakeId = '00000000-0000-0000-0000-000000000000';
       await expect(dataStore.retry(fakeId, new Date())).rejects.toThrow(`Task with ID ${fakeId} not found`);
     });
+
+    test('clears claimedAt after retry', async () => {
+      const task = await dataStore.schedule({
+        kind: 'test',
+        data: { value: 'claim-then-retry' },
+        priority: 1,
+        when: new Date(Date.now() - 1000),
+      });
+
+      // Claim the task
+      const claimed = await dataStore.claim({ kind: 'test', claimStaleTimeoutMs: 60000 });
+      expect(claimed!.claimedAt).toBeDefined();
+
+      // Retry should clear claimedAt
+      const retried = await dataStore.retry(task.id, new Date(Date.now() + 5000));
+      expect(retried.claimedAt).toBeUndefined();
+
+      // Verify in database
+      const found = await dataSource.getRepository(ChronoTaskEntity).findOneBy({ id: task.id });
+      expect(found!.claimedAt).toBeNull();
+    });
   });
 
   describe('delete', () => {
@@ -385,6 +536,34 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
       const fakeId = '00000000-0000-0000-0000-000000000000';
       const result = await dataStore.delete(fakeId, { force: true });
       expect(result).toBeUndefined();
+    });
+
+    test('throws when deleting non-existent task by kind and idempotencyKey', async () => {
+      await expect(dataStore.delete({ kind: 'test', idempotencyKey: 'non-existent-key' })).rejects.toThrow(
+        'cannot be deleted',
+      );
+    });
+
+    test('returns undefined for non-existent task by kind and idempotencyKey with force', async () => {
+      const result = await dataStore.delete({ kind: 'test', idempotencyKey: 'non-existent-key' }, { force: true });
+      expect(result).toBeUndefined();
+    });
+
+    test('deletes non-pending task by kind and idempotencyKey with force', async () => {
+      const task = await dataStore.schedule({
+        kind: 'test',
+        data: { value: 'force-delete-by-key' },
+        priority: 1,
+        when: new Date(Date.now() - 1000),
+        idempotencyKey: 'force-key',
+      });
+      await dataStore.claim({ kind: 'test', claimStaleTimeoutMs: 1000 });
+
+      const deleted = await dataStore.delete({ kind: 'test', idempotencyKey: 'force-key' }, { force: true });
+
+      expect(deleted!.id).toBe(task.id);
+      const found = await dataSource.getRepository(ChronoTaskEntity).findOneBy({ id: task.id });
+      expect(found).toBeNull();
     });
   });
 
@@ -541,6 +720,56 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
       await waitForCleanup();
 
       expect(onCleanupError).toHaveBeenCalledWith(cleanupError);
+    });
+
+    test('preserves pending and failed tasks during cleanup', async () => {
+      const ds = await createDataStoreWithConfig({
+        completedDocumentTTLSeconds: 1,
+        cleanupIntervalSeconds: 0,
+      });
+
+      // Create tasks in different states
+      const pendingTask = await ds.schedule({
+        kind: 'test',
+        data: { value: 'pending' },
+        priority: 1,
+        when: new Date(Date.now() - 1000),
+      });
+
+      const failedTask = await ds.schedule({
+        kind: 'test',
+        data: { value: 'failed' },
+        priority: 1,
+        when: new Date(Date.now() - 1000),
+      });
+      await ds.fail(failedTask.id);
+
+      const completedTask = await ds.schedule({
+        kind: 'test',
+        data: { value: 'completed' },
+        priority: 1,
+        when: new Date(Date.now() - 1000),
+      });
+      await ds.complete(completedTask.id);
+
+      // Backdate all tasks to be older than TTL
+      await dataSource.query(`UPDATE chrono_tasks SET created_at = NOW() - INTERVAL '2 seconds'`);
+      await dataSource.query(`UPDATE chrono_tasks SET completed_at = NOW() - INTERVAL '2 seconds' WHERE status = $1`, [
+        TaskStatus.COMPLETED,
+      ]);
+
+      // Trigger cleanup
+      await ds.claim({ kind: 'test', claimStaleTimeoutMs: 1000 });
+      await waitForCleanup();
+
+      // Pending task should still exist
+      expect(await dataSource.getRepository(ChronoTaskEntity).findOneBy({ id: pendingTask.id })).not.toBeNull();
+
+      // Failed task should still exist
+      expect(await dataSource.getRepository(ChronoTaskEntity).findOneBy({ id: failedTask.id })).not.toBeNull();
+
+      // Completed task should be deleted
+      expect(await dataSource.getRepository(ChronoTaskEntity).findOneBy({ id: completedTask.id })).toBeNull();
     });
   });
 
