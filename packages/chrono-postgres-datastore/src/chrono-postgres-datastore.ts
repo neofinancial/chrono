@@ -436,30 +436,35 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
   }
 
   private async cleanupCompletedTasks(): Promise<void> {
-    if (!this.dataSource) {
+    const dataSource = this.dataSource;
+    if (!dataSource) {
       return;
     }
 
     const cutoffDate = new Date(Date.now() - this.config.completedDocumentTTLSeconds * 1000);
 
-    const tasksToDelete = await this.buildCleanupSelectQuery(cutoffDate).getMany();
+    const tasksToDelete = await this.buildCleanupSelectQuery(dataSource, cutoffDate).getMany();
 
     if (tasksToDelete.length === 0) {
       return;
     }
 
-    await this.buildCleanupDeleteQuery(tasksToDelete.map((t) => t.id)).execute();
+    await this.buildCleanupDeleteQuery(
+      dataSource,
+      tasksToDelete.map((t) => t.id),
+    ).execute();
   }
 
-  private buildCleanupSelectQuery(cutoffDate: Date) {
-    return this.dataSource!.createQueryBuilder(ChronoTaskEntity, 'task')
+  private buildCleanupSelectQuery(dataSource: DataSource, cutoffDate: Date) {
+    return dataSource
+      .createQueryBuilder(ChronoTaskEntity, 'task')
       .select('task.id')
       .where('task.status = :status', { status: TaskStatus.COMPLETED })
       .andWhere('task.completedAt < :cutoffDate', { cutoffDate })
       .limit(this.config.cleanupBatchSize);
   }
 
-  private buildCleanupDeleteQuery(ids: string[]) {
-    return this.dataSource!.createQueryBuilder().delete().from(ChronoTaskEntity).whereInIds(ids);
+  private buildCleanupDeleteQuery(dataSource: DataSource, ids: string[]) {
+    return dataSource.createQueryBuilder().delete().from(ChronoTaskEntity).whereInIds(ids);
   }
 }

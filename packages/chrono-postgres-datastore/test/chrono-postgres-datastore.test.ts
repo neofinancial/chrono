@@ -19,7 +19,7 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
   beforeAll(async () => {
     dataSource = new DataSource({
       type: 'postgres',
-      url: DATABASE_URL!,
+      url: DATABASE_URL,
       entities: [ChronoTaskEntity],
       synchronize: true,
       dropSchema: true,
@@ -100,8 +100,8 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
 
       const found = await dataSource.getRepository(ChronoTaskEntity).findOneBy({ id: task.id });
       expect(found).not.toBeNull();
-      expect(found!.kind).toBe('test');
-      expect(found!.data).toEqual({ value: 'stored' });
+      expect(found?.kind).toBe('test');
+      expect(found?.data).toEqual({ value: 'stored' });
     });
 
     test('returns existing task for duplicate idempotency key', async () => {
@@ -171,7 +171,8 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
         .catch(() => {});
 
       // Task should not exist after rollback
-      const found = await dataSource.getRepository(ChronoTaskEntity).findOneBy({ id: taskId! });
+      expect(taskId).toBeDefined();
+      const found = await dataSource.getRepository(ChronoTaskEntity).findOneBy({ id: taskId as string });
       expect(found).toBeNull();
     });
   });
@@ -196,7 +197,7 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
         id: task.id,
         status: TaskStatus.CLAIMED,
       });
-      expect(claimed!.claimedAt).toBeDefined();
+      expect(claimed?.claimedAt).toBeDefined();
     });
 
     test('does not claim task scheduled in the future', async () => {
@@ -228,8 +229,8 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
       const first = await dataStore.claim({ kind: 'test', claimStaleTimeoutMs: 1000 });
       const second = await dataStore.claim({ kind: 'test', claimStaleTimeoutMs: 1000 });
 
-      expect(first!.id).toBe(high.id);
-      expect(second!.id).toBe(low.id);
+      expect(first?.id).toBe(high.id);
+      expect(second?.id).toBe(low.id);
     });
 
     test('claims tasks in scheduledAt order (earlier first) when same priority', async () => {
@@ -247,7 +248,7 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
       });
 
       const first = await dataStore.claim({ kind: 'test', claimStaleTimeoutMs: 1000 });
-      expect(first!.id).toBe(earlier.id);
+      expect(first?.id).toBe(earlier.id);
     });
 
     test('reclaims stale claimed task', async () => {
@@ -268,7 +269,7 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
 
       // Should be able to reclaim
       const reclaimed = await dataStore.claim({ kind: 'test', claimStaleTimeoutMs: 5000 });
-      expect(reclaimed!.id).toBe(task.id);
+      expect(reclaimed?.id).toBe(task.id);
     });
 
     test('only claims tasks of specified kind', async () => {
@@ -319,7 +320,7 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
 
       // First claim succeeds
       const first = await dataStore.claim({ kind: 'test', claimStaleTimeoutMs: 60000 });
-      expect(first!.id).toBe(task.id);
+      expect(first?.id).toBe(task.id);
 
       // Second claim should return undefined (task is claimed but not stale)
       const second = await dataStore.claim({ kind: 'test', claimStaleTimeoutMs: 60000 });
@@ -349,7 +350,7 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
       ]);
 
       // All claims should succeed
-      const claimedIds = claims.map((c) => c!.id);
+      const claimedIds = claims.map((c) => c?.id);
       expect(claimedIds).toHaveLength(5);
 
       // All claimed IDs should be unique (no duplicates)
@@ -464,7 +465,7 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
 
       // Claim the task
       const claimed = await dataStore.claim({ kind: 'test', claimStaleTimeoutMs: 60000 });
-      expect(claimed!.claimedAt).toBeDefined();
+      expect(claimed?.claimedAt).toBeDefined();
 
       // Retry should clear claimedAt
       const retried = await dataStore.retry(task.id, new Date(Date.now() + 5000));
@@ -472,7 +473,7 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
 
       // Verify in database
       const found = await dataSource.getRepository(ChronoTaskEntity).findOneBy({ id: task.id });
-      expect(found!.claimedAt).toBeNull();
+      expect(found?.claimedAt).toBeNull();
     });
   });
 
@@ -487,7 +488,7 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
 
       const deleted = await dataStore.delete(task.id);
 
-      expect(deleted!.id).toBe(task.id);
+      expect(deleted?.id).toBe(task.id);
       const found = await dataSource.getRepository(ChronoTaskEntity).findOneBy({ id: task.id });
       expect(found).toBeNull();
     });
@@ -503,7 +504,7 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
 
       const deleted = await dataStore.delete({ kind: 'test', idempotencyKey: 'delete-key' });
 
-      expect(deleted!.id).toBe(task.id);
+      expect(deleted?.id).toBe(task.id);
     });
 
     test('throws when deleting non-pending task without force', async () => {
@@ -529,7 +530,7 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
 
       const deleted = await dataStore.delete(task.id, { force: true });
 
-      expect(deleted!.id).toBe(task.id);
+      expect(deleted?.id).toBe(task.id);
     });
 
     test('returns undefined for non-existent task with force option', async () => {
@@ -561,7 +562,7 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
 
       const deleted = await dataStore.delete({ kind: 'test', idempotencyKey: 'force-key' }, { force: true });
 
-      expect(deleted!.id).toBe(task.id);
+      expect(deleted?.id).toBe(task.id);
       const found = await dataSource.getRepository(ChronoTaskEntity).findOneBy({ id: task.id });
       expect(found).toBeNull();
     });
