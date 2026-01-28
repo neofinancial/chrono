@@ -15,6 +15,9 @@ const DEFAULT_TTL_SECONDS = 60 * 60 * 24 * 30;
 const DEFAULT_CLEANUP_INTERVAL_SECONDS = 60;
 const DEFAULT_CLEANUP_BATCH_SIZE = 100;
 
+/** @internal Symbol key for test-only access to query builders */
+export const testAccessor = Symbol('testAccessor');
+
 export type ChronoPostgresDatastoreConfig = {
   /** TTL (in seconds) for completed tasks. Tasks older than this are deleted during cleanup. */
   completedDocumentTTLSeconds?: number;
@@ -185,10 +188,10 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
     }
 
     const result = await qb.execute();
-    const [row] = result.raw as ChronoTaskEntity[];
+    const [rawRow] = result.raw as Record<string, unknown>[];
 
-    if (row) {
-      return this.toTask<TaskKind>(row);
+    if (rawRow) {
+      return this.toTask<TaskKind>(this.fromRaw(rawRow));
     }
 
     if (options?.force) {
@@ -232,7 +235,8 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
         .orderBy('task.priority', 'DESC')
         .addOrderBy('task.scheduledAt', 'ASC')
         .limit(1)
-        .setLock('pessimistic_write', undefined, ['skipLocked']);
+        .setLock('pessimistic_write')
+        .setOnLocked('skip_locked');
 
       const taskToClaim = await taskToClaimQuery.getOne();
 
@@ -253,8 +257,8 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
         .returning('*')
         .execute();
 
-      const [claimedTask] = updateResult.raw as ChronoTaskEntity[];
-      return claimedTask ? this.toTask<TaskKind>(claimedTask) : undefined;
+      const [rawRow] = updateResult.raw as Record<string, unknown>[];
+      return rawRow ? this.toTask<TaskKind>(this.fromRaw(rawRow)) : undefined;
     });
 
     // Opportunistic cleanup runs after claim completes, outside the transaction
@@ -328,14 +332,14 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
   }
 
   private extractUpdatedTaskOrThrow<TaskKind extends keyof TaskMapping>(
-    raw: ChronoTaskEntity[],
+    raw: Record<string, unknown>[],
     taskId: string,
   ): Task<TaskKind, TaskMapping[TaskKind]> {
-    const [entity] = raw;
-    if (!entity) {
+    const [rawRow] = raw;
+    if (!rawRow) {
       throw new Error(`Task with ID ${taskId} not found`);
     }
-    return this.toTask<TaskKind>(entity);
+    return this.toTask<TaskKind>(this.fromRaw(rawRow));
   }
 
   /**
@@ -345,6 +349,29 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
     const PG_UNIQUE_VIOLATION = '23505';
     const isErrorObject = typeof error === 'object' && error !== null;
     return isErrorObject && 'code' in error && error.code === PG_UNIQUE_VIOLATION;
+  }
+
+  /**
+   * Maps a raw PostgreSQL row (snake_case columns) to an entity-like object (camelCase properties).
+   * TypeORM's RETURNING clause returns raw rows without column name mapping.
+   */
+  private fromRaw(raw: Record<string, unknown>): ChronoTaskEntity {
+    return {
+      id: raw.id as string,
+      kind: raw.kind as string,
+      status: raw.status as string,
+      data: raw.data as Record<string, unknown>,
+      priority: raw.priority as number | null,
+      idempotencyKey: raw.idempotency_key as string | null,
+      originalScheduleDate: raw.original_schedule_date as Date,
+      scheduledAt: raw.scheduled_at as Date,
+      claimedAt: raw.claimed_at as Date | null,
+      completedAt: raw.completed_at as Date | null,
+      lastExecutedAt: raw.last_executed_at as Date | null,
+      retryCount: raw.retry_count as number,
+      createdAt: raw.created_at as Date,
+      updatedAt: raw.updated_at as Date,
+    };
   }
 
   /**
@@ -395,24 +422,32 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
 
     const cutoffDate = new Date(Date.now() - this.config.completedDocumentTTLSeconds * 1000);
 
-    // Two-step cleanup: SELECT with LIMIT, then DELETE by IDs
-    const tasksToDelete = await this.dataSource
-      .createQueryBuilder(ChronoTaskEntity, 'task')
-      .select('task.id')
-      .where('task.status = :status', { status: TaskStatus.COMPLETED })
-      .andWhere('task.completedAt < :cutoffDate', { cutoffDate })
-      .limit(this.config.cleanupBatchSize)
-      .getMany();
+    const tasksToDelete = await this.buildCleanupSelectQuery(cutoffDate).getMany();
 
     if (tasksToDelete.length === 0) {
       return;
     }
 
-    await this.dataSource
-      .createQueryBuilder()
-      .delete()
-      .from(ChronoTaskEntity)
-      .whereInIds(tasksToDelete.map((t) => t.id))
-      .execute();
+    await this.buildCleanupDeleteQuery(tasksToDelete.map((t) => t.id)).execute();
+  }
+
+  private buildCleanupSelectQuery(cutoffDate: Date) {
+    return this.dataSource!.createQueryBuilder(ChronoTaskEntity, 'task')
+      .select('task.id')
+      .where('task.status = :status', { status: TaskStatus.COMPLETED })
+      .andWhere('task.completedAt < :cutoffDate', { cutoffDate })
+      .limit(this.config.cleanupBatchSize);
+  }
+
+  private buildCleanupDeleteQuery(ids: string[]) {
+    return this.dataSource!.createQueryBuilder().delete().from(ChronoTaskEntity).whereInIds(ids);
+  }
+
+  /** @internal Exposed for testing query generation only */
+  get [testAccessor]() {
+    return {
+      buildCleanupSelectQuery: (cutoffDate: Date) => this.buildCleanupSelectQuery(cutoffDate),
+      buildCleanupDeleteQuery: (ids: string[]) => this.buildCleanupDeleteQuery(ids),
+    };
   }
 }
