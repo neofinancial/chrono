@@ -14,6 +14,7 @@ import { ChronoTaskEntity } from './chrono-task.entity';
 const DEFAULT_TTL_SECONDS = 60 * 60 * 24 * 30;
 const DEFAULT_CLEANUP_INTERVAL_SECONDS = 60;
 const DEFAULT_CLEANUP_BATCH_SIZE = 100;
+const DEFAULT_INITIALIZATION_TIMEOUT_MS = 10_000;
 
 export type ChronoPostgresDatastoreConfig = {
   /** TTL (in seconds) for completed tasks. Tasks older than this are deleted during cleanup. */
@@ -27,6 +28,13 @@ export type ChronoPostgresDatastoreConfig = {
 
   /** Called when cleanup fails. Use this to report errors to Sentry, logging, etc. */
   onCleanupError?: (error: unknown) => void;
+
+  /**
+   * Timeout (in milliseconds) for waiting for datastore initialization.
+   * If the datastore is not initialized within this time, operations will throw an error.
+   * Default: 10000ms (10 seconds)
+   */
+  initializationTimeoutMs?: number;
 };
 
 export type PostgresDatastoreOptions = {
@@ -54,6 +62,7 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
       cleanupIntervalSeconds: config?.cleanupIntervalSeconds ?? DEFAULT_CLEANUP_INTERVAL_SECONDS,
       cleanupBatchSize: config?.cleanupBatchSize ?? DEFAULT_CLEANUP_BATCH_SIZE,
       onCleanupError: config?.onCleanupError,
+      initializationTimeoutMs: config?.initializationTimeoutMs ?? DEFAULT_INITIALIZATION_TIMEOUT_MS,
     };
   }
 
@@ -87,16 +96,30 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
 
   /**
    * Asynchronously gets the DataSource. If not yet initialized,
-   * returns a promise that resolves when initialize() is called.
+   * waits for initialize() to be called with a timeout.
+   * @throws Error if initialization times out
    */
   private async getDataSource(): Promise<DataSource> {
     if (this.dataSource) {
       return this.dataSource;
     }
 
-    return new Promise<DataSource>((resolve) => {
+    const initPromise = new Promise<DataSource>((resolve) => {
       this.dataSourceResolvers.push(resolve);
     });
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(
+          new Error(
+            `ChronoPostgresDatastore initialization timeout: datastore was not initialized within ${this.config.initializationTimeoutMs}ms. ` +
+              'Ensure initialize() is called before performing operations.',
+          ),
+        );
+      }, this.config.initializationTimeoutMs);
+    });
+
+    return Promise.race([initPromise, timeoutPromise]);
   }
 
   /**
