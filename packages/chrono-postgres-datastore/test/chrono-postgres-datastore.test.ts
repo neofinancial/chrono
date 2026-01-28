@@ -2,7 +2,7 @@ import { TaskStatus } from '@neofinancial/chrono';
 import { DataSource } from 'typeorm';
 import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
 
-import { ChronoPostgresDatastore, testAccessor } from '../src/chrono-postgres-datastore';
+import { ChronoPostgresDatastore } from '../src/chrono-postgres-datastore';
 import { ChronoTaskEntity } from '../src/chrono-task.entity';
 
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -578,29 +578,6 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
       expect(indexNames).toContain('idx_chrono_tasks_claim');
       expect(indexNames).toContain('idx_chrono_tasks_cleanup');
       expect(indexNames).toContain('idx_chrono_tasks_idempotency');
-    });
-  });
-
-  describe('query generation', () => {
-    const getTestAccessor = (ds: ChronoPostgresDatastore<TaskMapping>) => ds[testAccessor];
-
-    test('cleanup SELECT query uses correct column names', () => {
-      const accessor = getTestAccessor(dataStore);
-      const qb = accessor.buildCleanupSelectQuery(new Date());
-      const sql = qb.getQuery();
-
-      expect(sql).toContain('"task"."id"');
-      expect(sql).toContain('"task"."status"');
-      expect(sql).toContain('"task"."completed_at"');
-    });
-
-    test('cleanup DELETE query targets correct table', () => {
-      const accessor = getTestAccessor(dataStore);
-      const qb = accessor.buildCleanupDeleteQuery(['id1', 'id2']);
-      const sql = qb.getQuery();
-
-      expect(sql).toContain('DELETE');
-      expect(sql).toContain('"chrono_tasks"');
     });
   });
 

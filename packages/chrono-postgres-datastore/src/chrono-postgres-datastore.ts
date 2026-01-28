@@ -15,9 +15,6 @@ const DEFAULT_TTL_SECONDS = 60 * 60 * 24 * 30;
 const DEFAULT_CLEANUP_INTERVAL_SECONDS = 60;
 const DEFAULT_CLEANUP_BATCH_SIZE = 100;
 
-/** @internal Symbol key for test-only access to query builders */
-export const testAccessor = Symbol('testAccessor');
-
 export type ChronoPostgresDatastoreConfig = {
   /** TTL (in seconds) for completed tasks. Tasks older than this are deleted during cleanup. */
   completedDocumentTTLSeconds?: number;
@@ -441,13 +438,5 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
 
   private buildCleanupDeleteQuery(ids: string[]) {
     return this.dataSource!.createQueryBuilder().delete().from(ChronoTaskEntity).whereInIds(ids);
-  }
-
-  /** @internal Exposed for testing query generation only */
-  get [testAccessor]() {
-    return {
-      buildCleanupSelectQuery: (cutoffDate: Date) => this.buildCleanupSelectQuery(cutoffDate),
-      buildCleanupDeleteQuery: (ids: string[]) => this.buildCleanupDeleteQuery(ids),
-    };
   }
 }
