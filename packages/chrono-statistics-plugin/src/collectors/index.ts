@@ -1,10 +1,13 @@
-import type { EventEmitter } from 'node:events';
-import type { TaskMappingBase } from '../chrono';
-import type { Statistics } from '../datastore';
+import type EventEmitter from 'node:events';
+import type { Statistics, TaskMappingBase } from '@neofinancial/chrono'; // tODO should chrono have statistics types?
 
+/**
+ * Interface for statistics collectors.
+ * Implementations should extend EventEmitter and emit statistics events.
+ */
 export interface StatisticsCollector<TaskMapping extends TaskMappingBase>
   extends EventEmitter<StatisticsCollectorEventsMap<TaskMapping>> {
-  start(): Promise<void>;
+  start(taskKinds: (keyof TaskMapping)[]): Promise<void>;
   stop(): Promise<void>;
 }
 
@@ -19,4 +22,15 @@ export type StatisticsCollectorEventsMap<TaskMapping extends TaskMappingBase> = 
   [StatisticsCollectorEvents.STATISTICS_COLLECTED]: [{ statistics: Statistics<TaskMapping>; timestamp: Date }];
   [StatisticsCollectorEvents.STATISTICS_COLLECTED_ERROR]: [{ error: unknown; timestamp: Date }];
 };
-export { createStatisticsCollector, type StatisticsCollectorConfiguration } from './create-collector';
+
+export {
+  EventStatisticsCollector,
+  type EventStatisticsCollectorConfiguration,
+  type EventStatisticsCollectorInput,
+  type GetProcessorEventsFn,
+} from './event-statistics-collector';
+export {
+  PollingStatisticsCollector,
+  type PollingStatisticsCollectorConfiguration,
+  type PollingStatisticsCollectorInput,
+} from './polling-statistics-collector';

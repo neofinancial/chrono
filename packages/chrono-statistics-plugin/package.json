@@ -1,0 +1,53 @@
+{
+  "name": "@neofinancial/chrono-statistics-plugin",
+  "version": "0.6.0",
+  "description": "Statistics collection plugin for Chrono task scheduling system",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "homepage": "https://github.com/neofinancial/chrono",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neofinancial/chrono.git"
+  },
+  "main": "./build/index.cjs",
+  "module": "./build/index.mjs",
+  "types": "./build/index.d.cts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./build/index.d.mts",
+        "default": "./build/index.mjs"
+      },
+      "require": {
+        "types": "./build/index.d.cts",
+        "default": "./build/index.cjs"
+      }
+    }
+  },
+  "keywords": [
+    "chrono",
+    "plugin",
+    "statistics",
+    "monitoring"
+  ],
+  "author": "Neo Financial Engineering <engineering@neofinancial.com>",
+  "license": "MIT",
+  "files": [
+    "build/**",
+    "README.md"
+  ],
+  "scripts": {
+    "clean": "rimraf ./build",
+    "build": "tsdown",
+    "typecheck": "tsc -p ./tsconfig.json --noEmit",
+    "test": "NODE_ENV=test TZ=UTC vitest run"
+  },
+  "devDependencies": {
+    "@neofinancial/chrono": "workspace:*"
+  },
+  "peerDependencies": {
+    "@neofinancial/chrono": "workspace:*"
+  }
+}

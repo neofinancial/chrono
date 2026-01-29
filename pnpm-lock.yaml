@@ -72,6 +72,12 @@ importers:
         specifier: ^10.4.3
         version: 10.4.3
 
+  packages/chrono-statistics-plugin:
+    devDependencies:
+      '@neofinancial/chrono':
+        specifier: workspace:*
+        version: link:../chrono-core
+
 packages:
 
   '@babel/generator@7.28.6':

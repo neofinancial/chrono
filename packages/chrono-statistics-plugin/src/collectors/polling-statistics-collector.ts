@@ -1,35 +1,38 @@
 import EventEmitter from 'node:events';
 import timers from 'node:timers/promises';
 
-import type { TaskMappingBase } from '..';
-import type { StatisticsCollectorDatastore } from '../datastore';
+import type { StatisticsCollectorDatastore, TaskMappingBase } from '@neofinancial/chrono';
 import { type StatisticsCollector, StatisticsCollectorEvents, type StatisticsCollectorEventsMap } from '.';
 
-const DEFAULT_CONFIG: SimpleStatisticsCollectorConfiguration = {
+const DEFAULT_CONFIG: PollingStatisticsCollectorConfiguration = {
   statCollectionIntervalMs: 1_800_000,
 };
 
-export interface SimpleStatisticsCollectorConfiguration {
-  /** The interval at which the statistics collector will collect statistics and emit them as events. @default 1_800_000ms (30 minutes) */
+export interface PollingStatisticsCollectorConfiguration {
+  /** The interval at which the statistics collector will poll and emit statistics. @default 1_800_000ms (30 minutes) */
   statCollectionIntervalMs?: number;
 }
 
-export interface SimpleStatisticsCollectorInput<TaskMapping extends TaskMappingBase> {
+export interface PollingStatisticsCollectorInput<TaskMapping extends TaskMappingBase> {
+  /** The datastore to poll for statistics - must implement StatisticsCollectorDatastore */
   statisticsCollectorDatastore: StatisticsCollectorDatastore<TaskMapping>;
-  taskKinds: (keyof TaskMapping)[];
-  configuration?: SimpleStatisticsCollectorConfiguration;
+  /** Configuration options for the collector */
+  configuration?: PollingStatisticsCollectorConfiguration;
 }
 
-export class SimpleStatisticsCollector<TaskMapping extends TaskMappingBase>
+/**
+ * A statistics collector that polls the datastore at regular intervals.
+ * Requires a datastore that implements StatisticsCollectorDatastore.
+ */
+export class PollingStatisticsCollector<TaskMapping extends TaskMappingBase>
   extends EventEmitter<StatisticsCollectorEventsMap<TaskMapping>>
   implements StatisticsCollector<TaskMapping>
 {
-  private config: SimpleStatisticsCollectorConfiguration;
-  private taskKinds: (keyof TaskMapping)[];
+  private config: PollingStatisticsCollectorConfiguration;
   private statisticsCollectorDatastore: StatisticsCollectorDatastore<TaskMapping>;
   private interval: { abortController: AbortController; promise: Promise<void> } | undefined;
 
-  constructor(input: SimpleStatisticsCollectorInput<TaskMapping>) {
+  constructor(input: PollingStatisticsCollectorInput<TaskMapping>) {
     super();
 
     this.config = {
@@ -37,16 +40,16 @@ export class SimpleStatisticsCollector<TaskMapping extends TaskMappingBase>
       ...input.configuration,
     };
 
-    this.taskKinds = input.taskKinds;
     this.statisticsCollectorDatastore = input.statisticsCollectorDatastore;
   }
-  async start(): Promise<void> {
+
+  async start(taskKinds: (keyof TaskMapping)[]): Promise<void> {
     if (this.interval) {
       return;
     }
 
     const abortController = new AbortController();
-    const promise = this.runCollectionLoop(abortController);
+    const promise = this.runCollectionLoop(taskKinds, abortController);
 
     this.interval = { abortController, promise };
   }
@@ -61,13 +64,13 @@ export class SimpleStatisticsCollector<TaskMapping extends TaskMappingBase>
     this.interval = undefined;
   }
 
-  private async runCollectionLoop(abortController: AbortController): Promise<void> {
+  private async runCollectionLoop(taskKinds: (keyof TaskMapping)[], abortController: AbortController): Promise<void> {
     try {
       for await (const _ of timers.setInterval(this.config.statCollectionIntervalMs, undefined, {
         signal: abortController.signal,
       })) {
         try {
-          const statistics = await this.statisticsCollectorDatastore.collectStatistics({ taskKinds: this.taskKinds });
+          const statistics = await this.statisticsCollectorDatastore.collectStatistics({ taskKinds });
           this.emit(StatisticsCollectorEvents.STATISTICS_COLLECTED, { statistics, timestamp: new Date() });
         } catch (error) {
           this.emit(StatisticsCollectorEvents.STATISTICS_COLLECTED_ERROR, { error, timestamp: new Date() });

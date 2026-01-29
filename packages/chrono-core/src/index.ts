@@ -19,4 +19,5 @@ export {
   TaskStatus,
 } from './datastore';
 export { ChronoEvents } from './events';
+export type { ChronoPlugin, PluginContext } from './plugins';
 export { ProcessorEvents, type ProcessorEventsMap } from './processors';
