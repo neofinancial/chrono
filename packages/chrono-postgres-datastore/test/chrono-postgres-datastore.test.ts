@@ -97,9 +97,9 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
       });
 
       const result = await pool.query<ChronoTaskRow>('SELECT * FROM chrono_tasks WHERE id = $1', [task.id]);
-      expect(result.rows.length).toBe(1);
-      expect(result.rows[0].kind).toBe('test');
-      expect(result.rows[0].data).toEqual({ value: 'stored' });
+      expect(result.rows).toHaveLength(1);
+      expect(result.rows[0]?.kind).toBe('test');
+      expect(result.rows[0]?.data).toEqual({ value: 'stored' });
     });
 
     test('returns existing task for duplicate idempotency key', async () => {
@@ -349,7 +349,7 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
       ]);
 
       // All claims should succeed
-      const claimedIds = claims.map((c) => c?.id);
+      const claimedIds = claims.filter((c) => c !== undefined).map((c) => c.id);
       expect(claimedIds).toHaveLength(5);
 
       // All claimed IDs should be unique (no duplicates)
@@ -472,7 +472,7 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
 
       // Verify in database
       const result = await pool.query<ChronoTaskRow>('SELECT * FROM chrono_tasks WHERE id = $1', [task.id]);
-      expect(result.rows[0].claimed_at).toBeNull();
+      expect(result.rows[0]?.claimed_at).toBeNull();
     });
   });
 
@@ -568,7 +568,7 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
   });
 
   describe('cleanup', () => {
-    const createDataStoreWithConfig = async (config: Parameters<typeof ChronoPostgresDatastore>[0]) => {
+    const createDataStoreWithConfig = async (config: ConstructorParameters<typeof ChronoPostgresDatastore>[0]) => {
       const ds = new ChronoPostgresDatastore<TaskMapping>(config);
       await ds.initialize(pool);
       return ds;
