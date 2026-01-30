@@ -77,12 +77,12 @@ describe('createStatisticsPlugin', () => {
       expect(stopSpy).toHaveBeenCalledOnce();
     });
 
-    test('passes intervalMs configuration to the collector', () => {
+    test('passes statCollectionIntervalMs configuration to the collector', () => {
       const api = chrono.use(
         createStatisticsPlugin<TaskMapping>({
           type: 'polling',
           datastore,
-          intervalMs: 5000,
+          statCollectionIntervalMs: 5000,
         }),
       );
 

@@ -2,9 +2,9 @@ import { faker } from '@faker-js/faker';
 import { afterEach, beforeEach, describe, expect, test, vitest } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 
-import { Chrono, type TaskMappingBase } from '../../src/chrono';
+import { Chrono } from '../../src/chrono';
 import { type Datastore, type Task, TaskStatus } from '../../src/datastore';
-import type { ChronoPlugin, PluginContext } from '../../src/plugins';
+import type { ChronoPlugin } from '../../src/plugins';
 import { SimpleProcessor } from '../../src/processors/simple-processor';
 
 describe('Chrono', () => {
@@ -289,13 +289,17 @@ describe('Chrono', () => {
       const plugin1: ChronoPlugin<TaskMapping, void> = {
         name: 'plugin-1',
         register: (ctx) => {
-          ctx.hooks.onStart(() => callOrder.push('plugin-1'));
+          ctx.hooks.onStart(() => {
+            callOrder.push('plugin-1');
+          });
         },
       };
       const plugin2: ChronoPlugin<TaskMapping, void> = {
         name: 'plugin-2',
         register: (ctx) => {
-          ctx.hooks.onStart(() => callOrder.push('plugin-2'));
+          ctx.hooks.onStart(() => {
+            callOrder.push('plugin-2');
+          });
         },
       };
 
@@ -312,13 +316,17 @@ describe('Chrono', () => {
       const plugin1: ChronoPlugin<TaskMapping, void> = {
         name: 'plugin-1',
         register: (ctx) => {
-          ctx.hooks.onStop(() => callOrder.push('plugin-1'));
+          ctx.hooks.onStop(() => {
+            callOrder.push('plugin-1');
+          });
         },
       };
       const plugin2: ChronoPlugin<TaskMapping, void> = {
         name: 'plugin-2',
         register: (ctx) => {
-          ctx.hooks.onStop(() => callOrder.push('plugin-2'));
+          ctx.hooks.onStop(() => {
+            callOrder.push('plugin-2');
+          });
         },
       };
 

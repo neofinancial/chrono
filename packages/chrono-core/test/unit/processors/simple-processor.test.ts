@@ -18,7 +18,7 @@ describe('SimpleProcessor', () => {
   const handler = vi.fn(async () => Promise.resolve());
 
   const datastore = mock<Datastore<TaskMapping, DatastoreOptions>>();
-  const taskFactory = defineTaskFactory<TaskMapping>('send-test-task', { foo: 'bar' });
+  const taskFactory = defineTaskFactory<TaskMapping, 'send-test-task'>('send-test-task', { foo: 'bar' });
 
   beforeEach(() => {
     vi.useFakeTimers();

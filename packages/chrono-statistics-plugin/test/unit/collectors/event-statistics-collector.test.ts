@@ -2,7 +2,8 @@ import { EventEmitter } from 'node:events';
 import { setTimeout } from 'node:timers/promises';
 import { ProcessorEvents, type ProcessorEventsMap } from '@neofinancial/chrono';
 import { afterEach, beforeEach, describe, expect, test, vitest } from 'vitest';
-import { EventStatisticsCollector } from '../../src';
+import { EventStatisticsCollector } from '../../../src';
+import { defineTaskFactory } from '../../factories/task.factory';
 
 type TaskMapping = {
   'test-task': { data: string };
@@ -12,9 +13,13 @@ type TaskMapping = {
 describe('EventStatisticsCollector', () => {
   let testTaskProcessor: EventEmitter<ProcessorEventsMap<'test-task', TaskMapping>>;
   let anotherTaskProcessor: EventEmitter<ProcessorEventsMap<'another-task', TaskMapping>>;
+
   let getProcessorEvents: <TaskKind extends keyof TaskMapping>(
     kind: TaskKind,
   ) => EventEmitter<ProcessorEventsMap<TaskKind, TaskMapping>> | undefined;
+
+  const testTaskFactory = defineTaskFactory<TaskMapping, 'test-task'>('test-task', { data: 'test' });
+  const anotherTaskFactory = defineTaskFactory<TaskMapping, 'another-task'>('another-task', { value: 1 });
 
   beforeEach(() => {
     testTaskProcessor = new EventEmitter();
@@ -46,8 +51,8 @@ describe('EventStatisticsCollector', () => {
       await collector.start(['test-task']);
 
       // Emit claimed events
-      testTaskProcessor.emit(ProcessorEvents.TASK_CLAIMED, { task: {}, claimedAt: new Date() });
-      testTaskProcessor.emit(ProcessorEvents.TASK_CLAIMED, { task: {}, claimedAt: new Date() });
+      testTaskProcessor.emit(ProcessorEvents.TASK_CLAIMED, { task: testTaskFactory.build(), claimedAt: new Date() });
+      testTaskProcessor.emit(ProcessorEvents.TASK_CLAIMED, { task: testTaskFactory.build(), claimedAt: new Date() });
 
       // Wait for interval
       await setTimeout(25);
@@ -75,7 +80,7 @@ describe('EventStatisticsCollector', () => {
 
       // Emit completed events
       testTaskProcessor.emit(ProcessorEvents.TASK_COMPLETED, {
-        task: {},
+        task: testTaskFactory.build(),
         completedAt: new Date(),
         startedAt: new Date(),
       });
@@ -108,17 +113,17 @@ describe('EventStatisticsCollector', () => {
 
       // Emit failed events
       testTaskProcessor.emit(ProcessorEvents.TASK_FAILED, {
-        task: {},
+        task: testTaskFactory.build(),
         error: new Error('Task failed'),
         failedAt: new Date(),
       });
       testTaskProcessor.emit(ProcessorEvents.TASK_FAILED, {
-        task: {},
+        task: testTaskFactory.build(),
         error: new Error('Task failed'),
         failedAt: new Date(),
       });
       testTaskProcessor.emit(ProcessorEvents.TASK_FAILED, {
-        task: {},
+        task: testTaskFactory.build(),
         error: new Error('Task failed'),
         failedAt: new Date(),
       });
@@ -148,10 +153,10 @@ describe('EventStatisticsCollector', () => {
       await collector.start(['test-task', 'another-task']);
 
       // Emit events on different processors
-      testTaskProcessor.emit(ProcessorEvents.TASK_CLAIMED, { task: {}, claimedAt: new Date() });
-      testTaskProcessor.emit(ProcessorEvents.TASK_CLAIMED, { task: {}, claimedAt: new Date() });
+      testTaskProcessor.emit(ProcessorEvents.TASK_CLAIMED, { task: testTaskFactory.build(), claimedAt: new Date() });
+      testTaskProcessor.emit(ProcessorEvents.TASK_CLAIMED, { task: testTaskFactory.build(), claimedAt: new Date() });
       anotherTaskProcessor.emit(ProcessorEvents.TASK_FAILED, {
-        task: {},
+        task: anotherTaskFactory.build(),
         error: new Error('Failed'),
         failedAt: new Date(),
       });
@@ -231,9 +236,9 @@ describe('EventStatisticsCollector', () => {
       await collector.start(['test-task']);
 
       // Emit some events
-      testTaskProcessor.emit(ProcessorEvents.TASK_CLAIMED, { task: {}, claimedAt: new Date() });
+      testTaskProcessor.emit(ProcessorEvents.TASK_CLAIMED, { task: testTaskFactory.build(), claimedAt: new Date() });
       testTaskProcessor.emit(ProcessorEvents.TASK_FAILED, {
-        task: {},
+        task: testTaskFactory.build(),
         error: new Error('Failed'),
         failedAt: new Date(),
       });
@@ -241,7 +246,7 @@ describe('EventStatisticsCollector', () => {
       // Wait for interval
       await setTimeout(25);
 
-      const emittedStats = eventHandler.mock.calls[0][0].statistics;
+      const emittedStats = eventHandler.mock.calls[0]?.[0]?.statistics;
       expect(emittedStats['test-task'].pendingCount).toBe(0);
 
       await collector.stop();
@@ -259,20 +264,20 @@ describe('EventStatisticsCollector', () => {
       await collector.start(['test-task']);
 
       // Emit events before first interval
-      testTaskProcessor.emit(ProcessorEvents.TASK_CLAIMED, { task: {}, claimedAt: new Date() });
-      testTaskProcessor.emit(ProcessorEvents.TASK_CLAIMED, { task: {}, claimedAt: new Date() });
+      testTaskProcessor.emit(ProcessorEvents.TASK_CLAIMED, { task: testTaskFactory.build(), claimedAt: new Date() });
+      testTaskProcessor.emit(ProcessorEvents.TASK_CLAIMED, { task: testTaskFactory.build(), claimedAt: new Date() });
 
       // Wait for first interval
       await setTimeout(25);
 
       // First emission should have counts
-      expect(eventHandler.mock.calls[0][0].statistics['test-task'].claimedCount).toBe(2);
+      expect(eventHandler.mock.calls[0]?.[0]?.statistics['test-task'].claimedCount).toBe(2);
 
       // Wait for second interval (no new events)
       await setTimeout(25);
 
       // Second emission should have reset counts
-      expect(eventHandler.mock.calls[1][0].statistics['test-task'].claimedCount).toBe(0);
+      expect(eventHandler.mock.calls[1]?.[0]?.statistics['test-task'].claimedCount).toBe(0);
 
       await collector.stop();
     });
@@ -390,8 +395,8 @@ describe('EventStatisticsCollector', () => {
       await collector.start(['test-task']);
 
       // Emit some events
-      testTaskProcessor.emit(ProcessorEvents.TASK_CLAIMED, { task: {}, claimedAt: new Date() });
-      testTaskProcessor.emit(ProcessorEvents.TASK_CLAIMED, { task: {}, claimedAt: new Date() });
+      testTaskProcessor.emit(ProcessorEvents.TASK_CLAIMED, { task: testTaskFactory.build(), claimedAt: new Date() });
+      testTaskProcessor.emit(ProcessorEvents.TASK_CLAIMED, { task: testTaskFactory.build(), claimedAt: new Date() });
 
       await collector.stop();
 

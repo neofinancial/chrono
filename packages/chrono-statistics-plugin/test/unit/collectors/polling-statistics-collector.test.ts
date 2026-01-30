@@ -2,7 +2,7 @@ import { setTimeout } from 'node:timers/promises';
 import type { Statistics, StatisticsCollectorDatastore } from '@neofinancial/chrono';
 import { afterEach, describe, expect, test, vitest } from 'vitest';
 import { mock } from 'vitest-mock-extended';
-import { PollingStatisticsCollector } from '../../src';
+import { PollingStatisticsCollector } from '../../../src';
 
 type TaskMapping = {
   'test-task': { data: string };

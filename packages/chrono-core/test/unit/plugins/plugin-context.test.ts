@@ -84,9 +84,15 @@ describe('ChronoPluginContext', () => {
 
     test('executes multiple start hooks in order (FIFO)', async () => {
       const callOrder: number[] = [];
-      const hook1 = vitest.fn(() => callOrder.push(1));
-      const hook2 = vitest.fn(() => callOrder.push(2));
-      const hook3 = vitest.fn(() => callOrder.push(3));
+      const hook1 = vitest.fn(() => {
+        callOrder.push(1);
+      });
+      const hook2 = vitest.fn(() => {
+        callOrder.push(2);
+      });
+      const hook3 = vitest.fn(() => {
+        callOrder.push(3);
+      });
 
       context.hooks.onStart(hook1);
       context.hooks.onStart(hook2);
@@ -102,7 +108,9 @@ describe('ChronoPluginContext', () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
         callOrder.push(1);
       });
-      const syncHook = vitest.fn(() => callOrder.push(2));
+      const syncHook = vitest.fn(() => {
+        callOrder.push(2);
+      });
 
       context.hooks.onStart(asyncHook);
       context.hooks.onStart(syncHook);
@@ -124,9 +132,15 @@ describe('ChronoPluginContext', () => {
 
     test('executes multiple stop hooks in reverse order (LIFO)', async () => {
       const callOrder: number[] = [];
-      const hook1 = vitest.fn(() => callOrder.push(1));
-      const hook2 = vitest.fn(() => callOrder.push(2));
-      const hook3 = vitest.fn(() => callOrder.push(3));
+      const hook1 = vitest.fn(() => {
+        callOrder.push(1);
+      });
+      const hook2 = vitest.fn(() => {
+        callOrder.push(2);
+      });
+      const hook3 = vitest.fn(() => {
+        callOrder.push(3);
+      });
 
       context.hooks.onStop(hook1);
       context.hooks.onStop(hook2);
@@ -142,7 +156,9 @@ describe('ChronoPluginContext', () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
         callOrder.push(1);
       });
-      const syncHook = vitest.fn(() => callOrder.push(2));
+      const syncHook = vitest.fn(() => {
+        callOrder.push(2);
+      });
 
       context.hooks.onStop(syncHook);
       context.hooks.onStop(asyncHook);
