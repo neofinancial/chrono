@@ -10,10 +10,8 @@ import {
 } from '@neofinancial/chrono';
 import type { Pool, PoolClient } from 'pg';
 import {
-  CLAIM_SELECT_QUERY,
-  CLAIM_UPDATE_QUERY,
-  CLEANUP_DELETE_QUERY,
-  CLEANUP_SELECT_QUERY,
+  CLAIM_QUERY,
+  CLEANUP_QUERY,
   COMPLETE_QUERY,
   DELETE_BY_ID_FORCE_QUERY,
   DELETE_BY_ID_QUERY,
@@ -253,48 +251,20 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
     const now = new Date();
     const staleThreshold = new Date(now.getTime() - input.claimStaleTimeoutMs);
 
-    // Use a transaction to atomically select and update
-    const client = await pool.connect();
-    let result: Task<TaskKind, TaskMapping[TaskKind]> | undefined;
+    // Single atomic query: SELECT FOR UPDATE SKIP LOCKED + UPDATE in one statement
+    const result = await pool.query<ChronoTaskRow>(CLAIM_QUERY, [
+      TaskStatus.CLAIMED,
+      now,
+      String(input.kind),
+      TaskStatus.PENDING,
+      staleThreshold,
+    ]);
 
-    try {
-      await client.query('BEGIN');
-
-      // Find and lock the next claimable task
-      const selectResult = await client.query<ChronoTaskRow>(CLAIM_SELECT_QUERY, [
-        String(input.kind),
-        now,
-        TaskStatus.PENDING,
-        TaskStatus.CLAIMED,
-        staleThreshold,
-      ]);
-
-      const taskToClaim = selectResult.rows[0];
-      if (taskToClaim) {
-        // Update the task to claim it
-        const updateResult = await client.query<ChronoTaskRow>(CLAIM_UPDATE_QUERY, [
-          TaskStatus.CLAIMED,
-          now,
-          now,
-          taskToClaim.id,
-        ]);
-
-        const updatedRow = updateResult.rows[0];
-        result = updatedRow ? this.toTask<TaskKind>(updatedRow) : undefined;
-      }
-
-      await client.query('COMMIT');
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
-    }
-
-    // Opportunistic cleanup runs after claim completes, outside the transaction
+    // Opportunistic cleanup runs after claim completes
     this.maybeCleanupCompletedTasks();
 
-    return result;
+    const row = result.rows[0];
+    return row ? this.toTask<TaskKind>(row) : undefined;
   }
 
   async retry<TaskKind extends keyof TaskMapping>(
@@ -396,17 +366,7 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
 
     const cutoffDate = new Date(Date.now() - this.config.completedDocumentTTLSeconds * 1000);
 
-    const selectResult = await pool.query<{ id: string }>(CLEANUP_SELECT_QUERY, [
-      TaskStatus.COMPLETED,
-      cutoffDate,
-      this.config.cleanupBatchSize,
-    ]);
-
-    if (selectResult.rows.length === 0) {
-      return;
-    }
-
-    const ids = selectResult.rows.map((row) => row.id);
-    await pool.query(CLEANUP_DELETE_QUERY, [ids]);
+    // Single atomic query: DELETE with LIMIT via subquery
+    await pool.query(CLEANUP_QUERY, [TaskStatus.COMPLETED, cutoffDate, this.config.cleanupBatchSize]);
   }
 }

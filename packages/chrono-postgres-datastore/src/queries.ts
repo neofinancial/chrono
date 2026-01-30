@@ -15,20 +15,18 @@ export const FIND_BY_IDEMPOTENCY_KEY_QUERY = `
   SELECT * FROM chrono_tasks WHERE idempotency_key = $1
 `;
 
-export const CLAIM_SELECT_QUERY = `
-  SELECT * FROM chrono_tasks
-  WHERE kind = $1
-    AND scheduled_at <= $2
-    AND (status = $3 OR (status = $4 AND claimed_at <= $5))
-  ORDER BY priority DESC, scheduled_at ASC
-  LIMIT 1
-  FOR UPDATE SKIP LOCKED
-`;
-
-export const CLAIM_UPDATE_QUERY = `
+export const CLAIM_QUERY = `
   UPDATE chrono_tasks
-  SET status = $1, claimed_at = $2, updated_at = $3
-  WHERE id = $4
+  SET status = $1, claimed_at = $2, updated_at = $2
+  WHERE id = (
+    SELECT id FROM chrono_tasks
+    WHERE kind = $3
+      AND scheduled_at <= $2
+      AND (status = $4 OR (status = $1 AND claimed_at <= $5))
+    ORDER BY priority DESC, scheduled_at ASC
+    LIMIT 1
+    FOR UPDATE SKIP LOCKED
+  )
   RETURNING *
 `;
 
@@ -81,15 +79,12 @@ export const DELETE_BY_KEY_FORCE_QUERY = `
   RETURNING *
 `;
 
-// Cleanup: find old completed tasks
-export const CLEANUP_SELECT_QUERY = `
-  SELECT id FROM chrono_tasks
-  WHERE status = $1 AND completed_at < $2
-  LIMIT $3
-`;
-
-// Cleanup: delete tasks by IDs
-export const CLEANUP_DELETE_QUERY = `
+// Cleanup: delete old completed tasks with limit
+export const CLEANUP_QUERY = `
   DELETE FROM chrono_tasks
-  WHERE id = ANY($1)
+  WHERE id IN (
+    SELECT id FROM chrono_tasks
+    WHERE status = $1 AND completed_at < $2
+    LIMIT $3
+  )
 `;
