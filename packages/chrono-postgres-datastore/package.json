@@ -39,12 +39,14 @@
     "typecheck": "tsc -p ./tsconfig.json --noEmit",
     "test": "NODE_ENV=test TZ=UTC vitest run"
   },
-  "devDependencies": {
-    "@neofinancial/chrono": "workspace:*",
+  "dependencies": {
     "pg": "^8.13.1"
   },
+  "devDependencies": {
+    "@neofinancial/chrono": "workspace:*",
+    "@types/pg": "^8.11.0"
+  },
   "peerDependencies": {
-    "@neofinancial/chrono": ">=0.5.0",
-    "typeorm": "^0.3.20"
+    "@neofinancial/chrono": ">=0.5.0"
   }
 }

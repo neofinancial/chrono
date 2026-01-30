@@ -8,8 +8,23 @@ import {
   type TaskMappingBase,
   TaskStatus,
 } from '@neofinancial/chrono';
-import { Brackets, type DataSource, type EntityManager } from 'typeorm';
-import { ChronoTaskEntity } from './chrono-task.entity';
+import type { Pool, PoolClient } from 'pg';
+import {
+  CLAIM_SELECT_QUERY,
+  CLAIM_UPDATE_QUERY,
+  CLEANUP_DELETE_QUERY,
+  CLEANUP_SELECT_QUERY,
+  COMPLETE_QUERY,
+  DELETE_BY_ID_FORCE_QUERY,
+  DELETE_BY_ID_QUERY,
+  DELETE_BY_KEY_FORCE_QUERY,
+  DELETE_BY_KEY_QUERY,
+  FAIL_QUERY,
+  FIND_BY_IDEMPOTENCY_KEY_QUERY,
+  RETRY_QUERY,
+  SCHEDULE_QUERY,
+} from './queries';
+import type { ChronoTaskRow } from './types';
 
 const DEFAULT_TTL_SECONDS = 60 * 60 * 24 * 30;
 const DEFAULT_CLEANUP_INTERVAL_SECONDS = 60;
@@ -39,10 +54,10 @@ export type ChronoPostgresDatastoreConfig = {
 
 export type PostgresDatastoreOptions = {
   /**
-   * Optional EntityManager for participating in external transactions.
-   * When provided, all operations will use this manager instead of creating new queries.
+   * Optional PoolClient for participating in external transactions.
+   * When provided, all operations will use this client instead of acquiring from the pool.
    */
-  entityManager?: EntityManager;
+  client?: PoolClient;
 };
 
 type ResolvedConfig = Required<Omit<ChronoPostgresDatastoreConfig, 'onCleanupError'>> &
@@ -52,8 +67,8 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
   implements Datastore<TaskMapping, PostgresDatastoreOptions>
 {
   private config: ResolvedConfig;
-  private dataSource: DataSource | undefined;
-  private dataSourceResolvers: Array<(ds: DataSource) => void> = [];
+  private pool: Pool | undefined;
+  private poolResolvers: Array<(pool: Pool) => void> = [];
   private lastCleanupTime: Date = new Date(0);
 
   constructor(config?: ChronoPostgresDatastoreConfig) {
@@ -67,45 +82,37 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
   }
 
   /**
-   * Initializes the datastore with a TypeORM DataSource.
+   * Initializes the datastore with a pg Pool.
    * Must be called before any operations can be performed.
    *
-   * @param dataSource - The TypeORM DataSource connected to PostgreSQL
+   * @param pool - The pg Pool connected to PostgreSQL
    */
-  async initialize(dataSource: DataSource): Promise<void> {
-    if (this.dataSource) {
-      throw new Error('DataSource already initialized');
+  async initialize(pool: Pool): Promise<void> {
+    if (this.pool) {
+      throw new Error('Pool already initialized');
     }
 
-    this.dataSource = dataSource;
+    this.pool = pool;
 
-    // Resolve any pending operations waiting for the dataSource
-    const resolvers = this.dataSourceResolvers.splice(0);
+    // Resolve any pending operations waiting for the pool
+    const resolvers = this.poolResolvers.splice(0);
     for (const resolve of resolvers) {
-      resolve(dataSource);
+      resolve(pool);
     }
   }
 
   /**
-   * Returns the entity class for use with TypeORM.
-   * Useful for registering the entity with a DataSource.
-   */
-  static getEntity(): typeof ChronoTaskEntity {
-    return ChronoTaskEntity;
-  }
-
-  /**
-   * Asynchronously gets the DataSource. If not yet initialized,
+   * Asynchronously gets the Pool. If not yet initialized,
    * waits for initialize() to be called with a timeout.
    * @throws Error if initialization times out
    */
-  private async getDataSource(): Promise<DataSource> {
-    if (this.dataSource) {
-      return this.dataSource;
+  private async getPool(): Promise<Pool> {
+    if (this.pool) {
+      return this.pool;
     }
 
-    const initPromise = new Promise<DataSource>((resolve) => {
-      this.dataSourceResolvers.push(resolve);
+    const initPromise = new Promise<Pool>((resolve) => {
+      this.poolResolvers.push(resolve);
     });
 
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -123,95 +130,104 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
   }
 
   /**
-   * Gets the EntityManager to use for operations.
-   * Uses the provided manager from options if available, otherwise uses the DataSource's manager.
+   * Gets the client to use for operations.
+   * Uses the provided client from options if available, otherwise uses the pool.
    */
-  private getManager(options?: PostgresDatastoreOptions): EntityManager {
-    if (options?.entityManager) {
-      return options.entityManager;
+  private getQueryable(options?: PostgresDatastoreOptions): Pool | PoolClient {
+    if (options?.client) {
+      return options.client;
     }
 
-    if (!this.dataSource) {
-      throw new Error('DataSource not initialized');
+    if (!this.pool) {
+      throw new Error('Pool not initialized');
     }
 
-    return this.dataSource.manager;
+    return this.pool;
   }
 
   async schedule<TaskKind extends keyof TaskMapping>(
     input: ScheduleInput<TaskKind, TaskMapping[TaskKind], PostgresDatastoreOptions>,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
-    await this.getDataSource();
-    const manager = this.getManager(input.datastoreOptions);
+    await this.getPool();
+    const queryable = this.getQueryable(input.datastoreOptions);
 
-    const entity = manager.create(ChronoTaskEntity, {
-      kind: String(input.kind),
-      status: TaskStatus.PENDING,
-      data: input.data as Record<string, unknown>,
-      priority: input.priority ?? 0,
-      idempotencyKey: input.idempotencyKey ?? null,
-      originalScheduleDate: input.when,
-      scheduledAt: input.when,
-      retryCount: 0,
-    });
+    const values = [
+      String(input.kind),
+      TaskStatus.PENDING,
+      JSON.stringify(input.data),
+      input.priority ?? 0,
+      input.idempotencyKey ?? null,
+      input.when,
+      input.when,
+      0,
+    ];
 
     try {
-      const saved = await manager.save(ChronoTaskEntity, entity);
-      return this.toTask<TaskKind>(saved);
+      const result = await queryable.query<ChronoTaskRow>(SCHEDULE_QUERY, values);
+      const row = result.rows[0];
+      if (!row) {
+        throw new Error('Failed to insert task: no row returned');
+      }
+      return this.toTask<TaskKind>(row);
     } catch (error) {
-      return this.handleScheduleError<TaskKind>(error, input.idempotencyKey, manager);
+      return this.handleScheduleError<TaskKind>(error, input.idempotencyKey, queryable);
     }
   }
 
   private async handleScheduleError<TaskKind extends keyof TaskMapping>(
     error: unknown,
     idempotencyKey: string | undefined,
-    manager: EntityManager,
+    queryable: Pool | PoolClient,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
     const isIdempotencyConflict = this.isUniqueViolation(error) && idempotencyKey;
     if (!isIdempotencyConflict) {
       throw error;
     }
 
-    const existing = await manager.findOne(ChronoTaskEntity, {
-      where: { idempotencyKey },
-    });
+    const result = await queryable.query<ChronoTaskRow>(FIND_BY_IDEMPOTENCY_KEY_QUERY, [idempotencyKey]);
+    const row = result.rows[0];
 
-    if (!existing) {
+    if (!row) {
       throw new Error(
         `Failed to find existing task with idempotency key ${idempotencyKey} despite unique constraint error`,
       );
     }
 
-    return this.toTask<TaskKind>(existing);
+    return this.toTask<TaskKind>(row);
   }
 
   async delete<TaskKind extends Extract<keyof TaskMapping, string>>(
     key: DeleteInput<TaskKind>,
     options?: DeleteOptions,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined> {
-    const dataSource = await this.getDataSource();
+    const pool = await this.getPool();
 
-    const qb = dataSource.createQueryBuilder().delete().from(ChronoTaskEntity).returning('*');
+    let query: string;
+    let values: unknown[];
 
     if (typeof key === 'string') {
-      qb.where('id = :id', { id: key });
+      if (options?.force) {
+        query = DELETE_BY_ID_FORCE_QUERY;
+        values = [key];
+      } else {
+        query = DELETE_BY_ID_QUERY;
+        values = [key, TaskStatus.PENDING];
+      }
     } else {
-      qb.where('kind = :kind AND idempotency_key = :idempotencyKey', {
-        kind: String(key.kind),
-        idempotencyKey: key.idempotencyKey,
-      });
+      if (options?.force) {
+        query = DELETE_BY_KEY_FORCE_QUERY;
+        values = [String(key.kind), key.idempotencyKey];
+      } else {
+        query = DELETE_BY_KEY_QUERY;
+        values = [String(key.kind), key.idempotencyKey, TaskStatus.PENDING];
+      }
     }
 
-    if (!options?.force) {
-      qb.andWhere('status = :status', { status: TaskStatus.PENDING });
-    }
+    const result = await pool.query<ChronoTaskRow>(query, values);
+    const row = result.rows[0];
 
-    const result = await qb.execute();
-    const [rawRow] = result.raw as Record<string, unknown>[];
-
-    if (rawRow) {
-      return this.toTask<TaskKind>(this.fromRaw(rawRow));
+    if (row) {
+      return this.toTask<TaskKind>(row);
     }
 
     if (options?.force) {
@@ -233,53 +249,47 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
   async claim<TaskKind extends Extract<keyof TaskMapping, string>>(
     input: ClaimTaskInput<TaskKind>,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined> {
-    const dataSource = await this.getDataSource();
+    const pool = await this.getPool();
     const now = new Date();
     const staleThreshold = new Date(now.getTime() - input.claimStaleTimeoutMs);
 
     // Use a transaction to atomically select and update
-    const result = await dataSource.transaction(async (manager) => {
+    const client = await pool.connect();
+    let result: Task<TaskKind, TaskMapping[TaskKind]> | undefined;
+
+    try {
+      await client.query('BEGIN');
+
       // Find and lock the next claimable task
-      const taskToClaimQuery = manager
-        .createQueryBuilder(ChronoTaskEntity, 'task')
-        .where('task.kind = :kind', { kind: String(input.kind) })
-        .andWhere('task.scheduledAt <= :now', { now })
-        .andWhere(
-          new Brackets((qb) => {
-            qb.where('task.status = :pending', { pending: TaskStatus.PENDING }).orWhere(
-              'task.status = :claimed AND task.claimedAt <= :staleThreshold',
-              { claimed: TaskStatus.CLAIMED, staleThreshold },
-            );
-          }),
-        )
-        .orderBy('task.priority', 'DESC')
-        .addOrderBy('task.scheduledAt', 'ASC')
-        .limit(1)
-        .setLock('pessimistic_write')
-        .setOnLocked('skip_locked');
+      const selectResult = await client.query<ChronoTaskRow>(CLAIM_SELECT_QUERY, [
+        String(input.kind),
+        now,
+        TaskStatus.PENDING,
+        TaskStatus.CLAIMED,
+        staleThreshold,
+      ]);
 
-      const taskToClaim = await taskToClaimQuery.getOne();
+      const taskToClaim = selectResult.rows[0];
+      if (taskToClaim) {
+        // Update the task to claim it
+        const updateResult = await client.query<ChronoTaskRow>(CLAIM_UPDATE_QUERY, [
+          TaskStatus.CLAIMED,
+          now,
+          now,
+          taskToClaim.id,
+        ]);
 
-      if (!taskToClaim) {
-        return undefined;
+        const updatedRow = updateResult.rows[0];
+        result = updatedRow ? this.toTask<TaskKind>(updatedRow) : undefined;
       }
 
-      // Update the task to claim it
-      const updateResult = await manager
-        .createQueryBuilder()
-        .update(ChronoTaskEntity)
-        .set({
-          status: TaskStatus.CLAIMED,
-          claimedAt: now,
-          updatedAt: now,
-        })
-        .where('id = :id', { id: taskToClaim.id })
-        .returning('*')
-        .execute();
-
-      const [rawRow] = updateResult.raw as Record<string, unknown>[];
-      return rawRow ? this.toTask<TaskKind>(this.fromRaw(rawRow)) : undefined;
-    });
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
 
     // Opportunistic cleanup runs after claim completes, outside the transaction
     this.maybeCleanupCompletedTasks();
@@ -291,74 +301,41 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
     taskId: string,
     retryAt: Date,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
-    const dataSource = await this.getDataSource();
+    const pool = await this.getPool();
     const now = new Date();
 
-    const result = await dataSource
-      .createQueryBuilder()
-      .update(ChronoTaskEntity)
-      .set({
-        status: TaskStatus.PENDING,
-        scheduledAt: retryAt,
-        claimedAt: null,
-        updatedAt: now,
-        retryCount: () => 'retry_count + 1',
-      })
-      .where('id = :id', { id: taskId })
-      .returning('*')
-      .execute();
+    const result = await pool.query<ChronoTaskRow>(RETRY_QUERY, [TaskStatus.PENDING, retryAt, now, taskId]);
 
-    return this.extractUpdatedTaskOrThrow<TaskKind>(result.raw, taskId);
+    return this.extractUpdatedTaskOrThrow<TaskKind>(result.rows, taskId);
   }
 
   async complete<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
-    const dataSource = await this.getDataSource();
+    const pool = await this.getPool();
     const now = new Date();
 
-    const result = await dataSource
-      .createQueryBuilder()
-      .update(ChronoTaskEntity)
-      .set({
-        status: TaskStatus.COMPLETED,
-        completedAt: now,
-        lastExecutedAt: now,
-        updatedAt: now,
-      })
-      .where('id = :id', { id: taskId })
-      .returning('*')
-      .execute();
+    const result = await pool.query<ChronoTaskRow>(COMPLETE_QUERY, [TaskStatus.COMPLETED, now, now, now, taskId]);
 
-    return this.extractUpdatedTaskOrThrow<TaskKind>(result.raw, taskId);
+    return this.extractUpdatedTaskOrThrow<TaskKind>(result.rows, taskId);
   }
 
   async fail<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
-    const dataSource = await this.getDataSource();
+    const pool = await this.getPool();
     const now = new Date();
 
-    const result = await dataSource
-      .createQueryBuilder()
-      .update(ChronoTaskEntity)
-      .set({
-        status: TaskStatus.FAILED,
-        lastExecutedAt: now,
-        updatedAt: now,
-      })
-      .where('id = :id', { id: taskId })
-      .returning('*')
-      .execute();
+    const result = await pool.query<ChronoTaskRow>(FAIL_QUERY, [TaskStatus.FAILED, now, now, taskId]);
 
-    return this.extractUpdatedTaskOrThrow<TaskKind>(result.raw, taskId);
+    return this.extractUpdatedTaskOrThrow<TaskKind>(result.rows, taskId);
   }
 
   private extractUpdatedTaskOrThrow<TaskKind extends keyof TaskMapping>(
-    raw: Record<string, unknown>[],
+    rows: ChronoTaskRow[],
     taskId: string,
   ): Task<TaskKind, TaskMapping[TaskKind]> {
-    const [rawRow] = raw;
-    if (!rawRow) {
+    const row = rows[0];
+    if (!row) {
       throw new Error(`Task with ID ${taskId} not found`);
     }
-    return this.toTask<TaskKind>(this.fromRaw(rawRow));
+    return this.toTask<TaskKind>(row);
   }
 
   /**
@@ -371,45 +348,22 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
   }
 
   /**
-   * Maps a raw PostgreSQL row (snake_case columns) to an entity-like object (camelCase properties).
-   * TypeORM's RETURNING clause returns raw rows without column name mapping.
+   * Converts a database row to a Task object.
    */
-  private fromRaw(raw: Record<string, unknown>): ChronoTaskEntity {
+  private toTask<TaskKind extends keyof TaskMapping>(row: ChronoTaskRow): Task<TaskKind, TaskMapping[TaskKind]> {
     return {
-      id: raw.id as string,
-      kind: raw.kind as string,
-      status: raw.status as string,
-      data: raw.data as Record<string, unknown>,
-      priority: raw.priority as number | null,
-      idempotencyKey: raw.idempotency_key as string | null,
-      originalScheduleDate: raw.original_schedule_date as Date,
-      scheduledAt: raw.scheduled_at as Date,
-      claimedAt: raw.claimed_at as Date | null,
-      completedAt: raw.completed_at as Date | null,
-      lastExecutedAt: raw.last_executed_at as Date | null,
-      retryCount: raw.retry_count as number,
-      createdAt: raw.created_at as Date,
-      updatedAt: raw.updated_at as Date,
-    };
-  }
-
-  /**
-   * Converts a ChronoTaskEntity to a Task object.
-   */
-  private toTask<TaskKind extends keyof TaskMapping>(entity: ChronoTaskEntity): Task<TaskKind, TaskMapping[TaskKind]> {
-    return {
-      id: entity.id,
-      kind: entity.kind as TaskKind,
-      status: entity.status as TaskStatus,
-      data: entity.data as TaskMapping[TaskKind],
-      priority: entity.priority ?? undefined,
-      idempotencyKey: entity.idempotencyKey ?? undefined,
-      originalScheduleDate: entity.originalScheduleDate,
-      scheduledAt: entity.scheduledAt,
-      claimedAt: entity.claimedAt ?? undefined,
-      completedAt: entity.completedAt ?? undefined,
-      lastExecutedAt: entity.lastExecutedAt ?? undefined,
-      retryCount: entity.retryCount,
+      id: row.id,
+      kind: row.kind as TaskKind,
+      status: row.status as TaskStatus,
+      data: row.data as TaskMapping[TaskKind],
+      priority: row.priority ?? undefined,
+      idempotencyKey: row.idempotency_key ?? undefined,
+      originalScheduleDate: row.original_schedule_date,
+      scheduledAt: row.scheduled_at,
+      claimedAt: row.claimed_at ?? undefined,
+      completedAt: row.completed_at ?? undefined,
+      lastExecutedAt: row.last_executed_at ?? undefined,
+      retryCount: row.retry_count,
     };
   }
 
@@ -435,35 +389,24 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
   }
 
   private async cleanupCompletedTasks(): Promise<void> {
-    const dataSource = this.dataSource;
-    if (!dataSource) {
+    const pool = this.pool;
+    if (!pool) {
       return;
     }
 
     const cutoffDate = new Date(Date.now() - this.config.completedDocumentTTLSeconds * 1000);
 
-    const tasksToDelete = await this.buildCleanupSelectQuery(dataSource, cutoffDate).getMany();
+    const selectResult = await pool.query<{ id: string }>(CLEANUP_SELECT_QUERY, [
+      TaskStatus.COMPLETED,
+      cutoffDate,
+      this.config.cleanupBatchSize,
+    ]);
 
-    if (tasksToDelete.length === 0) {
+    if (selectResult.rows.length === 0) {
       return;
     }
 
-    await this.buildCleanupDeleteQuery(
-      dataSource,
-      tasksToDelete.map((t) => t.id),
-    ).execute();
-  }
-
-  private buildCleanupSelectQuery(dataSource: DataSource, cutoffDate: Date) {
-    return dataSource
-      .createQueryBuilder(ChronoTaskEntity, 'task')
-      .select('task.id')
-      .where('task.status = :status', { status: TaskStatus.COMPLETED })
-      .andWhere('task.completedAt < :cutoffDate', { cutoffDate })
-      .limit(this.config.cleanupBatchSize);
-  }
-
-  private buildCleanupDeleteQuery(dataSource: DataSource, ids: string[]) {
-    return dataSource.createQueryBuilder().delete().from(ChronoTaskEntity).whereInIds(ids);
+    const ids = selectResult.rows.map((row) => row.id);
+    await pool.query(CLEANUP_DELETE_QUERY, [ids]);
   }
 }

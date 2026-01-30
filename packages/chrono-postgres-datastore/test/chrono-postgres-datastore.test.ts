@@ -1,9 +1,10 @@
 import { TaskStatus } from '@neofinancial/chrono';
-import { DataSource } from 'typeorm';
+import { Pool } from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { ChronoPostgresDatastore } from '../src/chrono-postgres-datastore';
-import { ChronoTaskEntity } from '../src/chrono-task.entity';
+import { MIGRATION_DOWN_SQL, MIGRATION_UP_SQL } from '../src/migration';
+import type { ChronoTaskRow } from '../src/types';
 
 const DATABASE_URL = process.env.DATABASE_URL;
 
@@ -13,37 +14,34 @@ type TaskMapping = {
 };
 
 describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
-  let dataSource: DataSource;
+  let pool: Pool;
   let dataStore: ChronoPostgresDatastore<TaskMapping>;
 
   beforeAll(async () => {
-    dataSource = new DataSource({
-      type: 'postgres',
-      url: DATABASE_URL,
-      entities: [ChronoTaskEntity],
-      synchronize: true,
-      dropSchema: true,
-    });
-    await dataSource.initialize();
+    pool = new Pool({ connectionString: DATABASE_URL });
+
+    // Drop and recreate schema
+    await pool.query(MIGRATION_DOWN_SQL);
+    await pool.query(MIGRATION_UP_SQL);
 
     dataStore = new ChronoPostgresDatastore();
-    await dataStore.initialize(dataSource);
+    await dataStore.initialize(pool);
   });
 
   afterAll(async () => {
-    await dataSource?.destroy();
+    await pool?.end();
   });
 
   beforeEach(async () => {
-    await dataSource.getRepository(ChronoTaskEntity).clear();
+    await pool.query('DELETE FROM chrono_tasks');
   });
 
   describe('initialize', () => {
     test('throws if already initialized', async () => {
       const ds = new ChronoPostgresDatastore();
-      await ds.initialize(dataSource);
+      await ds.initialize(pool);
 
-      await expect(ds.initialize(dataSource)).rejects.toThrow('DataSource already initialized');
+      await expect(ds.initialize(pool)).rejects.toThrow('Pool already initialized');
     });
 
     test('operations wait for deferred initialization', async () => {
@@ -59,7 +57,7 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
 
       // Initialize after a small delay
       await new Promise((resolve) => setTimeout(resolve, 10));
-      await ds.initialize(dataSource);
+      await ds.initialize(pool);
 
       // The schedule should complete successfully
       const task = await schedulePromise;
@@ -98,10 +96,10 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
         when: new Date(),
       });
 
-      const found = await dataSource.getRepository(ChronoTaskEntity).findOneBy({ id: task.id });
-      expect(found).not.toBeNull();
-      expect(found?.kind).toBe('test');
-      expect(found?.data).toEqual({ value: 'stored' });
+      const result = await pool.query<ChronoTaskRow>('SELECT * FROM chrono_tasks WHERE id = $1', [task.id]);
+      expect(result.rows.length).toBe(1);
+      expect(result.rows[0].kind).toBe('test');
+      expect(result.rows[0].data).toEqual({ value: 'stored' });
     });
 
     test('returns existing task for duplicate idempotency key', async () => {
@@ -146,34 +144,37 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
       ).resolves.toMatchObject({ id: task1.id });
     });
 
-    test('uses provided entityManager for transaction participation', async () => {
+    test('uses provided client for transaction participation', async () => {
       let taskId: string | undefined;
 
       // Start a transaction, schedule a task, then rollback
-      await dataSource
-        .transaction(async (entityManager) => {
-          const task = await dataStore.schedule({
-            kind: 'test',
-            data: { value: 'transactional' },
-            priority: 1,
-            when: new Date(),
-            datastoreOptions: { entityManager },
-          });
-          taskId = task.id;
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
 
-          // Task should be visible within the transaction
-          const found = await entityManager.findOne(ChronoTaskEntity, { where: { id: taskId } });
-          expect(found).not.toBeNull();
+        const task = await dataStore.schedule({
+          kind: 'test',
+          data: { value: 'transactional' },
+          priority: 1,
+          when: new Date(),
+          datastoreOptions: { client },
+        });
+        taskId = task.id;
 
-          // Rollback by throwing
-          throw new Error('Rollback');
-        })
-        .catch(() => {});
+        // Task should be visible within the transaction
+        const result = await client.query('SELECT * FROM chrono_tasks WHERE id = $1', [taskId]);
+        expect(result.rows.length).toBe(1);
+
+        // Rollback
+        await client.query('ROLLBACK');
+      } finally {
+        client.release();
+      }
 
       // Task should not exist after rollback
       expect(taskId).toBeDefined();
-      const found = await dataSource.getRepository(ChronoTaskEntity).findOneBy({ id: taskId as string });
-      expect(found).toBeNull();
+      const result = await pool.query('SELECT * FROM chrono_tasks WHERE id = $1', [taskId]);
+      expect(result.rows.length).toBe(0);
     });
   });
 
@@ -263,9 +264,7 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
       await dataStore.claim({ kind: 'test', claimStaleTimeoutMs: 1000 });
 
       // Backdate claimedAt to make it stale
-      await dataSource.query(`UPDATE chrono_tasks SET claimed_at = NOW() - INTERVAL '10 seconds' WHERE id = $1`, [
-        task.id,
-      ]);
+      await pool.query(`UPDATE chrono_tasks SET claimed_at = NOW() - INTERVAL '10 seconds' WHERE id = $1`, [task.id]);
 
       // Should be able to reclaim
       const reclaimed = await dataStore.claim({ kind: 'test', claimStaleTimeoutMs: 5000 });
@@ -472,8 +471,8 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
       expect(retried.claimedAt).toBeUndefined();
 
       // Verify in database
-      const found = await dataSource.getRepository(ChronoTaskEntity).findOneBy({ id: task.id });
-      expect(found?.claimedAt).toBeNull();
+      const result = await pool.query<ChronoTaskRow>('SELECT * FROM chrono_tasks WHERE id = $1', [task.id]);
+      expect(result.rows[0].claimed_at).toBeNull();
     });
   });
 
@@ -489,8 +488,8 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
       const deleted = await dataStore.delete(task.id);
 
       expect(deleted?.id).toBe(task.id);
-      const found = await dataSource.getRepository(ChronoTaskEntity).findOneBy({ id: task.id });
-      expect(found).toBeNull();
+      const result = await pool.query('SELECT * FROM chrono_tasks WHERE id = $1', [task.id]);
+      expect(result.rows.length).toBe(0);
     });
 
     test('deletes pending task by kind and idempotencyKey', async () => {
@@ -563,15 +562,15 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
       const deleted = await dataStore.delete({ kind: 'test', idempotencyKey: 'force-key' }, { force: true });
 
       expect(deleted?.id).toBe(task.id);
-      const found = await dataSource.getRepository(ChronoTaskEntity).findOneBy({ id: task.id });
-      expect(found).toBeNull();
+      const result = await pool.query('SELECT * FROM chrono_tasks WHERE id = $1', [task.id]);
+      expect(result.rows.length).toBe(0);
     });
   });
 
   describe('cleanup', () => {
     const createDataStoreWithConfig = async (config: Parameters<typeof ChronoPostgresDatastore>[0]) => {
       const ds = new ChronoPostgresDatastore<TaskMapping>(config);
-      await ds.initialize(dataSource);
+      await ds.initialize(pool);
       return ds;
     };
 
@@ -592,15 +591,13 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
       await ds.complete(task.id);
 
       // Backdate to be older than TTL
-      await dataSource.query(`UPDATE chrono_tasks SET completed_at = NOW() - INTERVAL '2 seconds' WHERE id = $1`, [
-        task.id,
-      ]);
+      await pool.query(`UPDATE chrono_tasks SET completed_at = NOW() - INTERVAL '2 seconds' WHERE id = $1`, [task.id]);
 
       await ds.claim({ kind: 'test', claimStaleTimeoutMs: 1000 });
       await waitForCleanup();
 
-      const found = await dataSource.getRepository(ChronoTaskEntity).findOneBy({ id: task.id });
-      expect(found).toBeNull();
+      const result = await pool.query('SELECT * FROM chrono_tasks WHERE id = $1', [task.id]);
+      expect(result.rows.length).toBe(0);
     });
 
     test('preserves completed tasks newer than TTL', async () => {
@@ -620,8 +617,8 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
       await ds.claim({ kind: 'test', claimStaleTimeoutMs: 1000 });
       await waitForCleanup();
 
-      const found = await dataSource.getRepository(ChronoTaskEntity).findOneBy({ id: task.id });
-      expect(found).not.toBeNull();
+      const result = await pool.query('SELECT * FROM chrono_tasks WHERE id = $1', [task.id]);
+      expect(result.rows.length).toBe(1);
     });
 
     test('respects cleanup interval', async () => {
@@ -638,14 +635,13 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
         when: new Date(Date.now() - 1000),
       });
       await ds.complete(task1.id);
-      await dataSource.query(`UPDATE chrono_tasks SET completed_at = NOW() - INTERVAL '2 seconds' WHERE id = $1`, [
-        task1.id,
-      ]);
+      await pool.query(`UPDATE chrono_tasks SET completed_at = NOW() - INTERVAL '2 seconds' WHERE id = $1`, [task1.id]);
 
       await ds.claim({ kind: 'test', claimStaleTimeoutMs: 1000 });
       await waitForCleanup();
 
-      expect(await dataSource.getRepository(ChronoTaskEntity).findOneBy({ id: task1.id })).toBeNull();
+      const result1 = await pool.query('SELECT * FROM chrono_tasks WHERE id = $1', [task1.id]);
+      expect(result1.rows.length).toBe(0);
 
       // Second task - should NOT be cleaned up (interval not passed)
       const task2 = await ds.schedule({
@@ -655,14 +651,13 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
         when: new Date(Date.now() - 1000),
       });
       await ds.complete(task2.id);
-      await dataSource.query(`UPDATE chrono_tasks SET completed_at = NOW() - INTERVAL '2 seconds' WHERE id = $1`, [
-        task2.id,
-      ]);
+      await pool.query(`UPDATE chrono_tasks SET completed_at = NOW() - INTERVAL '2 seconds' WHERE id = $1`, [task2.id]);
 
       await ds.claim({ kind: 'test', claimStaleTimeoutMs: 1000 });
       await waitForCleanup();
 
-      expect(await dataSource.getRepository(ChronoTaskEntity).findOneBy({ id: task2.id })).not.toBeNull();
+      const result2 = await pool.query('SELECT * FROM chrono_tasks WHERE id = $1', [task2.id]);
+      expect(result2.rows.length).toBe(1);
     });
 
     test('respects batch size limit', async () => {
@@ -686,15 +681,15 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
       await Promise.all(tasks.map((t) => ds.complete(t.id)));
 
       // Backdate all
-      await dataSource.query(`UPDATE chrono_tasks SET completed_at = NOW() - INTERVAL '2 seconds' WHERE status = $1`, [
+      await pool.query(`UPDATE chrono_tasks SET completed_at = NOW() - INTERVAL '2 seconds' WHERE status = $1`, [
         TaskStatus.COMPLETED,
       ]);
 
       await ds.claim({ kind: 'test', claimStaleTimeoutMs: 1000 });
       await waitForCleanup();
 
-      const remaining = await dataSource.getRepository(ChronoTaskEntity).count();
-      expect(remaining).toBe(2); // Only 2 deleted (batch size), 2 remain
+      const result = await pool.query('SELECT COUNT(*) as count FROM chrono_tasks');
+      expect(Number(result.rows[0].count)).toBe(2); // Only 2 deleted (batch size), 2 remain
     });
 
     test('calls onCleanupError callback on failure', async () => {
@@ -754,8 +749,8 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
       await ds.complete(completedTask.id);
 
       // Backdate all tasks to be older than TTL
-      await dataSource.query(`UPDATE chrono_tasks SET created_at = NOW() - INTERVAL '2 seconds'`);
-      await dataSource.query(`UPDATE chrono_tasks SET completed_at = NOW() - INTERVAL '2 seconds' WHERE status = $1`, [
+      await pool.query(`UPDATE chrono_tasks SET created_at = NOW() - INTERVAL '2 seconds'`);
+      await pool.query(`UPDATE chrono_tasks SET completed_at = NOW() - INTERVAL '2 seconds' WHERE status = $1`, [
         TaskStatus.COMPLETED,
       ]);
 
@@ -764,57 +759,40 @@ describe.skipIf(!DATABASE_URL)('ChronoPostgresDatastore', () => {
       await waitForCleanup();
 
       // Pending task should still exist
-      expect(await dataSource.getRepository(ChronoTaskEntity).findOneBy({ id: pendingTask.id })).not.toBeNull();
+      const pendingResult = await pool.query('SELECT * FROM chrono_tasks WHERE id = $1', [pendingTask.id]);
+      expect(pendingResult.rows.length).toBe(1);
 
       // Failed task should still exist
-      expect(await dataSource.getRepository(ChronoTaskEntity).findOneBy({ id: failedTask.id })).not.toBeNull();
+      const failedResult = await pool.query('SELECT * FROM chrono_tasks WHERE id = $1', [failedTask.id]);
+      expect(failedResult.rows.length).toBe(1);
 
       // Completed task should be deleted
-      expect(await dataSource.getRepository(ChronoTaskEntity).findOneBy({ id: completedTask.id })).toBeNull();
+      const completedResult = await pool.query('SELECT * FROM chrono_tasks WHERE id = $1', [completedTask.id]);
+      expect(completedResult.rows.length).toBe(0);
     });
   });
 
-  describe('entity metadata', () => {
-    test('table name is chrono_tasks', () => {
-      const metadata = dataSource.getMetadata(ChronoTaskEntity);
-      expect(metadata.tableName).toBe('chrono_tasks');
-    });
+  describe('migration', () => {
+    test('MIGRATION_UP_SQL creates table and indexes', async () => {
+      // Table should exist (we already ran migration in beforeAll)
+      const tableResult = await pool.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables
+          WHERE table_name = 'chrono_tasks'
+        )
+      `);
+      expect(tableResult.rows[0].exists).toBe(true);
 
-    test('column mappings are correct', () => {
-      const metadata = dataSource.getMetadata(ChronoTaskEntity);
+      // Check indexes
+      const indexResult = await pool.query(`
+        SELECT indexname FROM pg_indexes WHERE tablename = 'chrono_tasks'
+      `);
+      const indexNames = indexResult.rows.map((r: { indexname: string }) => r.indexname);
 
-      const columnMappings: Record<string, string> = {
-        completedAt: 'completed_at',
-        scheduledAt: 'scheduled_at',
-        claimedAt: 'claimed_at',
-        idempotencyKey: 'idempotency_key',
-        originalScheduleDate: 'original_schedule_date',
-        lastExecutedAt: 'last_executed_at',
-        retryCount: 'retry_count',
-        createdAt: 'created_at',
-        updatedAt: 'updated_at',
-      };
-
-      for (const [property, dbColumn] of Object.entries(columnMappings)) {
-        const column = metadata.findColumnWithPropertyName(property);
-        expect(column?.databaseName, `${property} should map to ${dbColumn}`).toBe(dbColumn);
-      }
-    });
-
-    test('indexes exist', () => {
-      const metadata = dataSource.getMetadata(ChronoTaskEntity);
-      const indexNames = metadata.indices.map((i) => i.name);
-
+      expect(indexNames).toContain('chrono_tasks_pkey');
       expect(indexNames).toContain('idx_chrono_tasks_claim');
       expect(indexNames).toContain('idx_chrono_tasks_cleanup');
       expect(indexNames).toContain('idx_chrono_tasks_idempotency');
-    });
-  });
-
-  describe('getEntity', () => {
-    test('returns ChronoTaskEntity class', () => {
-      const entity = ChronoPostgresDatastore.getEntity();
-      expect(entity).toBe(ChronoTaskEntity);
     });
   });
 });
