@@ -300,7 +300,6 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
       .set({
         status: TaskStatus.PENDING,
         scheduledAt: retryAt,
-        lastExecutedAt: now,
         claimedAt: null,
         updatedAt: now,
         retryCount: () => 'retry_count + 1',
