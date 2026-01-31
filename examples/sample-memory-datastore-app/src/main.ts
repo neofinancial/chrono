@@ -1,5 +1,6 @@
 import { Chrono, ChronoEvents, ProcessorEvents } from '@neofinancial/chrono';
 import { ChronoMemoryDatastore } from '@neofinancial/chrono-memory-datastore';
+import { createStatisticsPlugin, StatisticsCollectorEvents } from '@neofinancial/chrono-statistics-plugin';
 
 type DatastoreOptions = undefined;
 
@@ -101,6 +102,16 @@ async function main() {
   });
 
   await Promise.all(taskCompletions);
+
+  const memoryDataStore2 = new ChronoMemoryDatastore<TaskMapping, DatastoreOptions>();
+  const chrono2 = new Chrono<TaskMapping, DatastoreOptions>(memoryDataStore2);
+
+  // Could do on events or.....
+  const statistics = chrono2.use(createStatisticsPlugin<TaskMapping>());
+
+  statistics.collector.on(StatisticsCollectorEvents.STATISTICS_COLLECTED, ({ statistics }) => {
+    console.log('statistics collected:', statistics);
+  });
 
   console.log('stopping the Chrono instance...');
 

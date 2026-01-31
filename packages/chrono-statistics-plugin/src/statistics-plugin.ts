@@ -43,6 +43,10 @@ export interface StatisticsPluginAPI<TaskMapping extends TaskMappingBase> {
   collector: StatisticsCollector<TaskMapping>;
 }
 
+export function createStatisticsPlugin<TaskMapping extends TaskMappingBase>(): ChronoPlugin<
+  TaskMapping,
+  StatisticsPluginAPI<TaskMapping>
+>;
 /**
  * Creates a statistics collector plugin for Chrono using polling strategy.
  * Requires a datastore that implements StatisticsCollectorDatastore.
@@ -97,13 +101,13 @@ export function createStatisticsPlugin<TaskMapping extends TaskMappingBase>(
 
 // Implementation
 export function createStatisticsPlugin<TaskMapping extends TaskMappingBase>(
-  config: StatisticsPluginConfig<TaskMapping>,
+  config?: StatisticsPluginConfig<TaskMapping>,
 ): ChronoPlugin<TaskMapping, StatisticsPluginAPI<TaskMapping>> {
   return {
     name: 'statistics-collector',
 
     register(ctx: PluginContext<TaskMapping>): StatisticsPluginAPI<TaskMapping> {
-      if (config.type === 'polling') {
+      if (config?.type === 'polling') {
         return registerPollingCollector(ctx, config);
       }
 
@@ -135,7 +139,7 @@ function registerPollingCollector<TaskMapping extends TaskMappingBase>(
 
 function registerEventCollector<TaskMapping extends TaskMappingBase>(
   ctx: PluginContext<TaskMapping>,
-  config: EventCollectStatisticsConfig,
+  config?: EventCollectStatisticsConfig,
 ): StatisticsPluginAPI<TaskMapping> {
   const collector = new EventStatisticsCollector<TaskMapping>({
     getProcessorEvents: (kind) => ctx.getProcessorEvents(kind),

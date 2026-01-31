@@ -50,6 +50,9 @@ importers:
       '@neofinancial/chrono-memory-datastore':
         specifier: workspace:*
         version: link:../../packages/chrono-memory-datastore
+      '@neofinancial/chrono-statistics-plugin':
+        specifier: workspace:*
+        version: link:../../packages/chrono-statistics-plugin
 
   packages/chrono-core: {}
 
