@@ -4,10 +4,14 @@ on:
   pull_request:
     types: ["opened", "reopened", "synchronize"]
 
+# Enforce least privilege - no default permissions at workflow level
+permissions: {}
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     timeout-minutes: 10
     strategy:
       matrix:
