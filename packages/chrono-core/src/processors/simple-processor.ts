@@ -7,7 +7,7 @@ import { promiseWithTimeout } from '../utils/promise-utils';
 import { ProcessorEvents, type ProcessorEventsMap } from './events';
 import type { Processor } from './processor';
 
-const DEFAULT_CONFIG: SimpleProcessorConfig = {
+const DEFAULT_CONFIG: SimpleProcessorConfiguration = {
   maxConcurrency: 1,
   claimIntervalMs: 50,
   idleIntervalMs: 5_000,
@@ -17,7 +17,7 @@ const DEFAULT_CONFIG: SimpleProcessorConfig = {
   processLoopRetryIntervalMs: 20_000,
 };
 
-type SimpleProcessorConfig = {
+export type SimpleProcessorConfiguration = {
   /** The maximum number of concurrent tasks that the processor will use when processing. @default 1 */
   maxConcurrency: number;
   /** The interval at which the processor will wait before next poll when the previous poll returned a task @default 50ms */
@@ -48,7 +48,7 @@ export class SimpleProcessor<
   extends EventEmitter<ProcessorEventsMap<TaskKind, TaskMapping>>
   implements Processor<TaskKind, TaskMapping>
 {
-  private config: SimpleProcessorConfig;
+  private config: SimpleProcessorConfiguration;
 
   private exitChannels: EventEmitter<InternalProcessorEventsMap>[] = [];
   private stopRequested = false;
@@ -58,7 +58,7 @@ export class SimpleProcessor<
     private taskKind: TaskKind,
     private handler: (task: Task<TaskKind, TaskMapping[TaskKind]>) => Promise<void>,
     private backOffStrategy: BackoffStrategy,
-    config?: Partial<SimpleProcessorConfig>,
+    config?: Partial<SimpleProcessorConfiguration>,
   ) {
     super();
 
@@ -67,7 +67,7 @@ export class SimpleProcessor<
       ...config,
     };
 
-    this.validatedHandlerTimeout();
+    this.validateConfiguration();
   }
 
   /**
@@ -78,10 +78,16 @@ export class SimpleProcessor<
    *
    * @throws {Error} If the task handler timeout is greater than or equal to the claim stale timeout.
    */
-  private validatedHandlerTimeout() {
+  private validateConfiguration() {
     if (this.config.taskHandlerTimeoutMs >= this.config.claimStaleTimeoutMs) {
       throw new Error(
         `Task handler timeout (${this.config.taskHandlerTimeoutMs}ms) must be less than the claim stale timeout (${this.config.claimStaleTimeoutMs}ms)`,
+      );
+    }
+
+    if (this.config.claimIntervalMs >= this.config.idleIntervalMs) {
+      throw new Error(
+        `Claim interval (${this.config.claimIntervalMs}ms) must be less than the idle interval (${this.config.idleIntervalMs}ms)`,
       );
     }
   }
@@ -166,6 +172,7 @@ export class SimpleProcessor<
    * @param task The task to handle.
    */
   private async handleTask(task: Task<TaskKind, TaskMapping[TaskKind]>) {
+    const startedAt = new Date();
     try {
       await promiseWithTimeout(this.handler(task), this.config.taskHandlerTimeoutMs);
     } catch (error) {
@@ -180,6 +187,7 @@ export class SimpleProcessor<
       this.emit(ProcessorEvents.TASK_COMPLETED, {
         task: completedTask,
         completedAt: completedTask.completedAt || new Date(),
+        startedAt,
       });
     } catch (error) {
       this.emit(ProcessorEvents.TASK_COMPLETION_FAILURE, {

@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "description": "",
   "private": true,
-  "main": "./build/index.js",
+  "main": "./build/index.cjs",
   "module": "./build/index.mjs",
-  "types": "./build/index.d.ts",
+  "types": "./build/index.d.cts",
   "exports": {
     ".": {
       "import": {
@@ -13,8 +13,8 @@
         "default": "./build/index.mjs"
       },
       "require": {
-        "types": "./build/index.d.ts",
-        "default": "./build/index.js"
+        "types": "./build/index.d.cts",
+        "default": "./build/index.cjs"
       }
     }
   },
@@ -27,7 +27,7 @@
   "scripts": {
     "clean": "rimraf ./build",
     "build": "tsdown",
-    "typecheck": "tsc -p ./tsconfig.json --noEmit",
+    "typecheck": "tsc -p ./tsconfig.json --noEmit && tsc -p ./test/tsconfig.json --noEmit",
     "test": "NODE_ENV=test TZ=UTC vitest run"
   },
   "dependencies": {

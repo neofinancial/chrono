@@ -7,8 +7,6 @@ export default defineConfig({
     environment: 'node',
     logHeapUsage: true,
     restoreMocks: true,
-    poolOptions: { threads: { singleThread: true } },
-    pool: 'threads',
     coverage: {
       reporter: ['lcov', 'text'],
       include: ['src/*'],
