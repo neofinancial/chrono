@@ -5,7 +5,8 @@ import type { Processor } from './processor';
 import { SimpleProcessor, type SimpleProcessorConfiguration } from './simple-processor';
 
 /**
- * Configuration for the processor.
+ * Configuration for the processor. Default to simple processor.
+ * @default { type: 'simple' } if no configuration is provided.
  */
 export type ProcessorConfiguration = Partial<SimpleProcessorConfiguration> & { type?: 'simple' };
 

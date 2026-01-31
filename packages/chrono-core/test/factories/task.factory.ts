@@ -6,7 +6,7 @@ import { type Task, type TaskMappingBase, TaskStatus } from '../../src';
 export const defineTaskFactory = <TaskMapping extends TaskMappingBase, TaskKind extends keyof TaskMapping>(
   taskKind: TaskKind,
   defaultTaskData: TaskMapping[TaskKind],
-) =>
+): Factory<Task<TaskKind, TaskMapping[TaskKind]>> =>
   Factory.define<Task<TaskKind, TaskMapping[TaskKind]>>((): Task<TaskKind, TaskMapping[TaskKind]> => {
     return {
       id: faker.database.mongodbObjectId(),

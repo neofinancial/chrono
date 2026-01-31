@@ -38,6 +38,7 @@ async function main() {
     handler: async (task) => {
       console.log('send-email task handler:', task);
     },
+    processorConfiguration: { type: 'simple' },
     backoffStrategyOptions: {
       type: 'exponential',
       maxDelayMs: 10_000,
