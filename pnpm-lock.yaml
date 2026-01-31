@@ -57,13 +57,14 @@ importers:
         version: link:../chrono-core
 
   packages/chrono-mongo-datastore:
+    dependencies:
+      mongodb:
+        specifier: ^6
+        version: 6.15.0
     devDependencies:
       '@neofinancial/chrono':
         specifier: workspace:*
         version: link:../chrono-core
-      mongodb:
-        specifier: ^6
-        version: 6.15.0
       mongodb-memory-server:
         specifier: ^10.1.4
         version: 10.1.4
