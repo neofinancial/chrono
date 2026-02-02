@@ -8,6 +8,8 @@
     "moduleDetection": "force",
     "isolatedModules": true,
     "verbatimModuleSyntax": false,
+    "declaration": true,
+    "declarationMap": true,
 
     "strict": true,
     "noUncheckedIndexedAccess": true,
