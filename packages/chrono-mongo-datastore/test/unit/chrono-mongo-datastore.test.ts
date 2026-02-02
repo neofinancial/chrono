@@ -20,7 +20,7 @@ describe('ChronoMongoDatastore', () => {
   let mongoClient: MongoClient;
   let collection: Collection<TaskDocument<keyof TaskMapping, TaskMapping[keyof TaskMapping]>>;
   let dataStore: ChronoMongoDatastore<TaskMapping>;
-  const testTaskFactory = defineTaskFactory<TaskMapping>('test', { test: 'test' });
+  const testTaskFactory = defineTaskFactory<TaskMapping, 'test'>('test', { test: 'test' });
 
   beforeAll(async () => {
     mongoClient = new MongoClient('mongodb://localhost:27017');
