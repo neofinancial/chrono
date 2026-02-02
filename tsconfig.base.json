@@ -1,10 +1,12 @@
 {
   "compilerOptions": {
+    "outDir": "build",
     "esModuleInterop": true,
     "skipLibCheck": true,
     "target": "es2022",
-    "allowJs": true,
     "resolveJsonModule": true,
+    "declaration": true,
+    "isolatedDeclarations": true,
     "moduleDetection": "force",
     "isolatedModules": true,
     "verbatimModuleSyntax": false,

@@ -1,7 +1,7 @@
 import { TaskStatus } from '@neofinancial/chrono';
 import type { Collection } from 'mongodb';
 
-export const DEFAULT_EXPIRY_SECONDS = 60 * 60 * 24 * 30; // 30 days
+export const DEFAULT_EXPIRY_SECONDS: number = 60 * 60 * 24 * 30; // 30 days
 
 export const IndexNames = {
   COMPLETED_DOCUMENT_TTL_INDEX: 'chrono-completed-document-ttl-index',

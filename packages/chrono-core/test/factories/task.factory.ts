@@ -1,6 +1,7 @@
 import { faker } from '@faker-js/faker';
-import { type Task, type TaskMappingBase, TaskStatus } from '@neofinancial/chrono';
 import { Factory } from 'fishery';
+
+import { type Task, type TaskMappingBase, TaskStatus } from '../../src';
 
 export const defineTaskFactory = <TaskMapping extends TaskMappingBase, TaskKind extends keyof TaskMapping>(
   taskKind: TaskKind,

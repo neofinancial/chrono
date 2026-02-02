@@ -4,14 +4,18 @@ on:
   pull_request:
     types: ["opened", "reopened", "synchronize"]
 
-
-env:
-  NODE_VERSION: 20
+# Enforce least privilege - no default permissions at workflow level
+permissions: {}
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     timeout-minutes: 10
+    strategy:
+      matrix:
+        node-version: [20.x, 22.x, 24.x]
 
     steps:
       - name: Perform source code checkout
@@ -20,7 +24,7 @@ jobs:
       - name: Setup Node version
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: ${{ matrix.node-version }}
 
       - name: Cache Package Node Modules
         uses: actions/cache@v4

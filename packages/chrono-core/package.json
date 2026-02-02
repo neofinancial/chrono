@@ -1,6 +1,6 @@
 {
   "name": "@neofinancial/chrono",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Core package for Chrono task scheduling system",
   "private": false,
   "publishConfig": {
@@ -11,9 +11,9 @@
     "type": "git",
     "url": "https://github.com/neofinancial/chrono.git"
   },
-  "main": "./build/index.js",
+  "main": "./build/index.cjs",
   "module": "./build/index.mjs",
-  "types": "./build/index.d.ts",
+  "types": "./build/index.d.cts",
   "exports": {
     ".": {
       "import": {
@@ -21,8 +21,8 @@
         "default": "./build/index.mjs"
       },
       "require": {
-        "types": "./build/index.d.ts",
-        "default": "./build/index.js"
+        "types": "./build/index.d.cts",
+        "default": "./build/index.cjs"
       }
     }
   },
@@ -34,9 +34,9 @@
   "author": "Neo Financial Engineering <engineering@neofinancial.com>",
   "license": "MIT",
   "scripts": {
-    "clean": "rimraf ./build",
+    "clean": "rimraf ./build ./node_modules",
     "build": "tsdown",
-    "typecheck": "tsc -p ./tsconfig.json --noEmit",
+    "typecheck": "tsc -p ./tsconfig.json --noEmit & tsc -p ./test/tsconfig.json --noEmit",
     "test": "NODE_ENV=test TZ=UTC vitest run"
   }
 }

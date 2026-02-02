@@ -19,7 +19,9 @@ export type ProcessorEvents = (typeof ProcessorEvents)[keyof typeof ProcessorEve
 
 export type ProcessorEventsMap<TaskKind extends keyof TaskMapping, TaskMapping extends TaskMappingBase> = {
   [ProcessorEvents.TASK_CLAIMED]: [{ task: Task<TaskKind, TaskMapping[TaskKind]>; claimedAt: Date }];
-  [ProcessorEvents.TASK_COMPLETED]: [{ task: Task<TaskKind, TaskMapping[TaskKind]>; completedAt: Date }];
+  [ProcessorEvents.TASK_COMPLETED]: [
+    { task: Task<TaskKind, TaskMapping[TaskKind]>; completedAt: Date; startedAt: Date },
+  ];
   [ProcessorEvents.TASK_RETRY_SCHEDULED]: [
     { task: Task<TaskKind, TaskMapping[TaskKind]>; error: unknown; retryScheduledAt: Date; errorAt: Date },
   ];
@@ -29,5 +31,3 @@ export type ProcessorEventsMap<TaskKind extends keyof TaskMapping, TaskMapping e
   ];
   [ProcessorEvents.UNKNOWN_PROCESSING_ERROR]: [{ error: unknown; timestamp: Date }];
 };
-
-ProcessorEvents.TASK_CLAIMED;

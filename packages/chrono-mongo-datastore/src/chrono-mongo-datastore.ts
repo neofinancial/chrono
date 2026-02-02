@@ -63,7 +63,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
    *
    * @param database - The database to set.
    */
-  async initialize(database: Db) {
+  async initialize(database: Db): Promise<void> {
     if (this.database) {
       throw new Error('Database connection already set');
     }
