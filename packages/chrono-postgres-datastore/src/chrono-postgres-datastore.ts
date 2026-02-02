@@ -130,24 +130,20 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
   /**
    * Gets the client to use for operations.
    * Uses the provided client from options if available, otherwise uses the pool.
+   * Waits for initialization if the pool is not yet available.
    */
-  private getQueryable(options?: PostgresDatastoreOptions): Pool | PoolClient {
+  private async getQueryable(options?: PostgresDatastoreOptions): Promise<Pool | PoolClient> {
     if (options?.client) {
       return options.client;
     }
 
-    if (!this.pool) {
-      throw new Error('Pool not initialized');
-    }
-
-    return this.pool;
+    return this.getPool();
   }
 
   async schedule<TaskKind extends keyof TaskMapping>(
     input: ScheduleInput<TaskKind, TaskMapping[TaskKind], PostgresDatastoreOptions>,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
-    await this.getPool();
-    const queryable = this.getQueryable(input.datastoreOptions);
+    const queryable = await this.getQueryable(input.datastoreOptions);
 
     const values = [
       String(input.kind),
@@ -198,7 +194,7 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
     key: DeleteInput<TaskKind>,
     options?: DeleteOptions,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined> {
-    const pool = await this.getPool();
+    const queryable = await this.getQueryable();
 
     let query: string;
     let values: unknown[];
@@ -221,7 +217,7 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
       }
     }
 
-    const result = await pool.query<ChronoTaskRow>(query, values);
+    const result = await queryable.query<ChronoTaskRow>(query, values);
     const row = result.rows[0];
 
     if (row) {
@@ -247,12 +243,12 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
   async claim<TaskKind extends Extract<keyof TaskMapping, string>>(
     input: ClaimTaskInput<TaskKind>,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]> | undefined> {
-    const pool = await this.getPool();
+    const queryable = await this.getQueryable();
     const now = new Date();
     const staleThreshold = new Date(now.getTime() - input.claimStaleTimeoutMs);
 
     // Single atomic query: SELECT FOR UPDATE SKIP LOCKED + UPDATE in one statement
-    const result = await pool.query<ChronoTaskRow>(CLAIM_QUERY, [
+    const result = await queryable.query<ChronoTaskRow>(CLAIM_QUERY, [
       TaskStatus.CLAIMED,
       now,
       String(input.kind),
@@ -271,28 +267,28 @@ export class ChronoPostgresDatastore<TaskMapping extends TaskMappingBase>
     taskId: string,
     retryAt: Date,
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
-    const pool = await this.getPool();
+    const queryable = await this.getQueryable();
     const now = new Date();
 
-    const result = await pool.query<ChronoTaskRow>(RETRY_QUERY, [TaskStatus.PENDING, retryAt, now, taskId]);
+    const result = await queryable.query<ChronoTaskRow>(RETRY_QUERY, [TaskStatus.PENDING, retryAt, now, taskId]);
 
     return this.extractUpdatedTaskOrThrow<TaskKind>(result.rows, taskId);
   }
 
   async complete<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
-    const pool = await this.getPool();
+    const queryable = await this.getQueryable();
     const now = new Date();
 
-    const result = await pool.query<ChronoTaskRow>(COMPLETE_QUERY, [TaskStatus.COMPLETED, now, now, now, taskId]);
+    const result = await queryable.query<ChronoTaskRow>(COMPLETE_QUERY, [TaskStatus.COMPLETED, now, now, now, taskId]);
 
     return this.extractUpdatedTaskOrThrow<TaskKind>(result.rows, taskId);
   }
 
   async fail<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>> {
-    const pool = await this.getPool();
+    const queryable = await this.getQueryable();
     const now = new Date();
 
-    const result = await pool.query<ChronoTaskRow>(FAIL_QUERY, [TaskStatus.FAILED, now, now, taskId]);
+    const result = await queryable.query<ChronoTaskRow>(FAIL_QUERY, [TaskStatus.FAILED, now, now, taskId]);
 
     return this.extractUpdatedTaskOrThrow<TaskKind>(result.rows, taskId);
   }
