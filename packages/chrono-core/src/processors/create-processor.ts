@@ -28,6 +28,7 @@ export function createProcessor<
   DatastoreOptions,
 >(input: CreateProcessorInput<TaskKind, TaskMapping, DatastoreOptions>): Processor<TaskKind, TaskMapping> {
   const backoffStrategy = backoffStrategyFactory(input.backoffStrategyOptions);
+
   const processorType = input.configuration?.type ?? 'simple';
 
   if (processorType === 'simple') {

@@ -66,19 +66,18 @@ export class SimpleProcessor<
       ...config,
     };
 
-    this.validateConfigurations();
+    this.validateConfiguration();
   }
 
   /**
    * Validates that the task handler timeout is less than the claim stale timeout.
-   * Also validates that the claim interval is less than the idle interval and the idle interval is less than the stat collection interval.
    * Throws an error if the validation fails.
    * This ensures that the task handler has enough time to complete before the task is considered stale.
    * This is important to prevent tasks from being claimed again while they are still being processed.
    *
    * @throws {Error} If the task handler timeout is greater than or equal to the claim stale timeout.
    */
-  private validateConfigurations() {
+  private validateConfiguration() {
     if (this.config.taskHandlerTimeoutMs >= this.config.claimStaleTimeoutMs) {
       throw new Error(
         `Task handler timeout (${this.config.taskHandlerTimeoutMs}ms) must be less than the claim stale timeout (${this.config.claimStaleTimeoutMs}ms)`,
