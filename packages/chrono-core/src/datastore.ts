@@ -65,7 +65,6 @@ export type DeleteOptions = {
 };
 
 export type DeleteInput<TaskKind> = DeleteByIdempotencyKeyInput<TaskKind> | string;
-
 export interface Datastore<TaskMapping extends TaskMappingBase, DatastoreOptions> {
   schedule<TaskKind extends keyof TaskMapping>(
     input: ScheduleInput<TaskKind, TaskMapping[TaskKind], DatastoreOptions>,
@@ -87,4 +86,22 @@ export interface Datastore<TaskMapping extends TaskMappingBase, DatastoreOptions
   ): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
   complete<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
   fail<TaskKind extends keyof TaskMapping>(taskId: string): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
+}
+
+export type Statistics<TaskMapping extends TaskMappingBase> = {
+  [TaskKind in keyof TaskMapping]: {
+    /** The number of tasks with status CLAIMED with a scheduledAt date in the past*/
+    claimedCount: number;
+    /** The number of tasks with status PENDING with a scheduledAt date in the past*/
+    pendingCount: number;
+    /** The number of tasks with status FAILED with a scheduledAt date in the past*/
+    failedCount: number;
+  };
+};
+
+export interface CollectStatisticsInput<TaskMapping extends TaskMappingBase> {
+  taskKinds: (keyof TaskMapping)[];
+}
+export interface StatisticsCollectorDatastore<TaskMapping extends TaskMappingBase> {
+  collectStatistics(input: CollectStatisticsInput<TaskMapping>): Promise<Statistics<TaskMapping>>;
 }

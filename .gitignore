@@ -2,6 +2,5 @@ node_modules/
 
 packages/**/tsconfig.tsbuildinfo
 packages/**/build
-
 examples/**/tsconfig.tsbuildinfo
 examples/**/build

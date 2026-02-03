@@ -49,7 +49,6 @@ export class SimpleProcessor<
   implements Processor<TaskKind, TaskMapping>
 {
   private config: SimpleProcessorConfiguration;
-
   private exitChannels: EventEmitter<InternalProcessorEventsMap>[] = [];
   private stopRequested = false;
 

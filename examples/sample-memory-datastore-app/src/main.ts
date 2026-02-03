@@ -1,5 +1,6 @@
 import { Chrono, ChronoEvents, ProcessorEvents } from '@neofinancial/chrono';
 import { ChronoMemoryDatastore } from '@neofinancial/chrono-memory-datastore';
+import { createStatisticsPlugin, StatisticsCollectorEvents } from '@neofinancial/chrono-statistics-plugin';
 
 type DatastoreOptions = undefined;
 
@@ -32,6 +33,21 @@ async function main() {
       baseDelayMs: 100,
     },
   });
+  processor1.on(ProcessorEvents.TASK_CLAIMED, ({ task }) => {
+    console.log('task claimed:', task);
+  });
+  processor1.on(ProcessorEvents.TASK_RETRY_SCHEDULED, ({ task }) => {
+    console.log('task retry scheduled:', task);
+  });
+  processor1.on(ProcessorEvents.TASK_FAILED, ({ task }) => {
+    console.log('task failed:', task);
+  });
+  processor1.on(ProcessorEvents.TASK_COMPLETION_FAILURE, ({ task }) => {
+    console.log('task completion failure:', task);
+  });
+  processor1.on(ProcessorEvents.UNKNOWN_PROCESSING_ERROR, ({ error }) => {
+    console.error('unknown processing error:', error);
+  });
 
   const processor2 = chrono.registerTaskHandler({
     kind: 'send-email',
@@ -45,6 +61,22 @@ async function main() {
       baseDelayMs: 100,
       jitter: 'full',
     },
+  });
+
+  processor2.on(ProcessorEvents.TASK_CLAIMED, ({ task }) => {
+    console.log('task claimed:', task);
+  });
+  processor2.on(ProcessorEvents.TASK_RETRY_SCHEDULED, ({ task }) => {
+    console.log('task retry scheduled:', task);
+  });
+  processor2.on(ProcessorEvents.TASK_FAILED, ({ task }) => {
+    console.log('task failed:', task);
+  });
+  processor2.on(ProcessorEvents.TASK_COMPLETION_FAILURE, ({ task }) => {
+    console.log('task completion failure:', task);
+  });
+  processor2.on(ProcessorEvents.UNKNOWN_PROCESSING_ERROR, ({ error }) => {
+    console.error('unknown processing error:', error);
   });
 
   // you can attach event listeners to the processors
@@ -70,6 +102,16 @@ async function main() {
   });
 
   await Promise.all(taskCompletions);
+
+  const memoryDataStore2 = new ChronoMemoryDatastore<TaskMapping, DatastoreOptions>();
+  const chrono2 = new Chrono<TaskMapping, DatastoreOptions>(memoryDataStore2);
+
+  // Could do on events or.....
+  const statistics = chrono2.use(createStatisticsPlugin<TaskMapping>());
+
+  statistics.collector.on(StatisticsCollectorEvents.STATISTICS_COLLECTED, ({ statistics }) => {
+    console.log('statistics collected:', statistics);
+  });
 
   console.log('stopping the Chrono instance...');
 

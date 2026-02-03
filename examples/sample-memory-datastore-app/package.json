@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@neofinancial/chrono": "workspace:*",
-    "@neofinancial/chrono-memory-datastore": "workspace:*"
+    "@neofinancial/chrono-memory-datastore": "workspace:*",
+    "@neofinancial/chrono-statistics-plugin": "workspace:*"
   }
 }

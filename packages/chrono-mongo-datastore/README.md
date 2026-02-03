@@ -50,8 +50,8 @@ yarn add @neofinancial/chrono mongodb
 
 - **Node.js**: >= 20.18.3
 - **MongoDB**: >= 4.4
-- **@neofinancial/chrono**: >= 0.1.1 (peer dependencies)
-- **mongodb**: >= 6.15 (peer dependency)
+- **mongodb**: >= 6.15
+- **@neofinancial/chrono**: >= 0.6.0 (peer dependencies)
 
 ## Basic Usage
 

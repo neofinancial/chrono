@@ -1,7 +1,7 @@
 {
-  "name": "@neofinancial/chrono-mongo-datastore",
+  "name": "@neofinancial/chrono-statistics-plugin",
   "version": "0.6.0",
-  "description": "MongoDB datastore implementation for Chrono task scheduling system",
+  "description": "Statistics collection plugin for Chrono task scheduling system",
   "private": false,
   "publishConfig": {
     "access": "public"
@@ -26,17 +26,25 @@
       }
     }
   },
+  "keywords": [
+    "chrono",
+    "plugin",
+    "statistics",
+    "monitoring"
+  ],
+  "author": "Neo Financial Engineering <engineering@neofinancial.com>",
+  "license": "MIT",
+  "files": [
+    "build/**",
+    "README.md"
+  ],
   "scripts": {
-    "clean": "rimraf ./build ./node_modules",
+    "clean": "rimraf ./build",
     "build": "tsdown",
     "typecheck": "tsc -p ./tsconfig.json --noEmit && tsc -p ./test/tsconfig.json --noEmit",
     "test": "NODE_ENV=test TZ=UTC vitest run"
   },
-  "dependencies": {
-    "mongodb": "^6"
-  },
   "devDependencies": {
-    "mongodb-memory-server": "^10.4.3",
     "@neofinancial/chrono": "workspace:*"
   },
   "peerDependencies": {
