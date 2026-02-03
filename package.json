@@ -22,9 +22,9 @@
     "publish": "pnpm i && pnpm build && pnpm publish -r"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.3.13",
+    "@biomejs/biome": "^2.3.14",
     "@faker-js/faker": "^9.9.0",
-    "@types/node": "^20.19.17",
+    "@types/node": "^20.19.31",
     "fishery": "^2.4.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
