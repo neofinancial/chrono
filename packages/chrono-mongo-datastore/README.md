@@ -1,16 +1,17 @@
 # @neofinancial/chrono-mongo-datastore
 
-⚠️ This project is pre-alpha, and not ready for production use. ⚠️
+> **Warning** This project is pre-alpha and not ready for production use.
 
-MongoDB datastore implementation for [@neofinancial/chrono](https://www.npmjs.com/package/@neofinancial/chrono) - a TypeScript task scheduling and processing system.
+MongoDB datastore implementation for [@neofinancial/chrono](https://www.npmjs.com/package/@neofinancial/chrono) -- a TypeScript task scheduling and processing system.
 
 ## Features
 
-- **MongoDB persistence**: Store tasks reliably in MongoDB
-- **Production ready**: Designed for production workloads
-- **Type-safe**: Full TypeScript support with generic task types
-- **Configurable**: Customize collection names and database settings
-- **Optimized queries**: Efficient task claiming and processing
+- **MongoDB persistence** -- store tasks reliably in MongoDB
+- **Type-safe** -- full TypeScript support with generic task types
+- **Configurable** -- customize collection names, TTL, and uninitialized behavior
+- **Automatic indexes** -- optimized indexes created on initialization
+- **Transaction support** -- pass MongoDB sessions for transactional task scheduling
+- **Deferred initialization** -- operations can queue until the database connection is ready
 
 ## Installation
 
@@ -22,7 +23,17 @@ pnpm add @neofinancial/chrono-mongo-datastore
 yarn add @neofinancial/chrono-mongo-datastore
 ```
 
-This package supports both **CommonJS** and **ES Modules**:
+### Peer Dependencies
+
+This package requires `@neofinancial/chrono` as a peer dependency:
+
+```bash
+npm install @neofinancial/chrono
+```
+
+### Module Formats
+
+Both CommonJS and ES Modules are supported:
 
 ```typescript
 // ESM
@@ -34,26 +45,14 @@ const {
 } = require("@neofinancial/chrono-mongo-datastore");
 ```
 
-## Peer Dependencies
-
-`@neofinancial/chrono` and `mongodb`
-
-```bash
-npm install @neofinancial/chrono mongodb
-# or
-pnpm add @neofinancial/chrono mongodb
-# or
-yarn add @neofinancial/chrono mongodb
-```
-
 ## Requirements
 
-- **Node.js**: >= 20.18.3
-- **MongoDB**: >= 4.4
-- **@neofinancial/chrono**: >= 0.1.1 (peer dependencies)
-- **mongodb**: >= 6.15 (peer dependency)
+- **Node.js** >= 20.18.3
+- **MongoDB** >= 4.4
+- **@neofinancial/chrono** (peer dependency, version range as specified in package.json)
+- **mongodb** (installed as a dependency, version 6.x or compatible)
 
-## Basic Usage
+## Quick Start
 
 ```typescript
 import { Chrono } from "@neofinancial/chrono";
@@ -69,61 +68,47 @@ type TaskMapping = {
   "process-payment": { userId: string; amount: number };
 };
 
-// MongoDB connection
+// Connect to MongoDB
 const client = new MongoClient("mongodb://localhost:27017");
 await client.connect();
-const db = client.db("my-app");
 
-// Create MongoDB datastore (uses default collection name 'chrono-tasks')
-const datastore = await ChronoMongoDatastore.create<TaskMapping>(db);
+// Create and initialize the datastore
+const datastore = new ChronoMongoDatastore<TaskMapping>();
+await datastore.initialize(client.db("my-app"));
 
-// Initialize Chrono with the MongoDB datastore
+// Initialize Chrono with the datastore
 const chrono = new Chrono<TaskMapping, MongoDatastoreOptions>(datastore);
 
 // Register task handlers
 chrono.registerTaskHandler({
   kind: "send-email",
   handler: async (task) => {
-    console.log(
-      `Sending email to ${task.data.to} with subject "${task.data.subject}"`
-    );
-    // Your email sending logic here
+    console.log(`Sending email to ${task.data.to}: "${task.data.subject}"`);
   },
 });
 
 chrono.registerTaskHandler({
   kind: "process-payment",
   handler: async (task) => {
-    console.log(
-      `Processing payment of ${task.data.amount} for user ${task.data.userId}`
-    );
-    // Your payment processing logic here
+    console.log(`Processing $${task.data.amount} for user ${task.data.userId}`);
   },
 });
 
-// Start processing tasks
+// Start Chrono (processors begin polling)
 await chrono.start();
 
 // Schedule tasks
 await chrono.scheduleTask({
   kind: "send-email",
   when: new Date(),
-  data: {
-    to: "user@example.com",
-    subject: "Welcome!",
-    body: "Welcome to our application!",
-  },
+  data: { to: "user@example.com", subject: "Welcome!", body: "Hello!" },
 });
 
-// Schedule a future task with idempotency
 await chrono.scheduleTask({
   kind: "process-payment",
   when: new Date(Date.now() + 30 * 60 * 1000), // 30 minutes from now
-  data: {
-    userId: "user-123",
-    amount: 99.99,
-  },
-  idempotencyKey: "payment-user-123-session-abc", // Prevents duplicates
+  data: { userId: "user-123", amount: 99.99 },
+  idempotencyKey: "payment-user-123-session-abc",
 });
 
 // Graceful shutdown
@@ -136,49 +121,100 @@ process.on("SIGINT", async () => {
 
 ## Configuration
 
-### Configuration Options
+All configuration is optional. Pass a partial config to the constructor:
 
 ```typescript
-interface ChronoMongoDatastoreConfig {
-  collectionName: string; // Collection name for storing tasks
-  completedDocumentTTL?: number; // TTL in seconds for completed tasks (optional)
-}
+const datastore = new ChronoMongoDatastore<TaskMapping>({
+  collectionName: "background-jobs",
+  completedDocumentTTLSeconds: 86400, // 24 hours
+  uninitializedDatastoreBehavior: "queue",
+  maxQueueSize: 1000,
+});
 ```
 
-### Example with Custom Configuration
+### Options
+
+| Option                           | Type                   | Default                 | Description                                                                                                       |
+| -------------------------------- | ---------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `collectionName`                 | `string`               | `'chrono-tasks'`        | MongoDB collection name for storing tasks                                                                         |
+| `completedDocumentTTLSeconds`    | `number`               | `2592000` (30 days)     | TTL in seconds for completed task documents. MongoDB automatically deletes completed documents after this period. |
+| `uninitializedDatastoreBehavior` | `'queue'` \| `'throw'` | `'queue'`               | How to handle operations before `initialize()` is called                                                          |
+| `maxQueueSize`                   | `number`               | `undefined` (unlimited) | Maximum number of queued operations when behavior is `'queue'`                                                    |
+
+### Uninitialized Datastore Behavior
+
+The datastore supports a two-phase setup: you can create the datastore and register it with Chrono before your MongoDB connection is ready. The `uninitializedDatastoreBehavior` option controls what happens when operations are performed before `initialize()` is called.
+
+**`'queue'` (default)** -- Operations return promises that resolve once `initialize()` is called. This allows you to start Chrono and even schedule tasks before your database connection is established. All queued operations are flushed in order when the database becomes available. Note that all data will be lost if chrono is shutdown before these queued operations are persisted to disk
 
 ```typescript
-import { MongoClient } from "mongodb";
-import { ChronoMongoDatastore } from "@neofinancial/chrono-mongo-datastore";
-
-const client = new MongoClient("mongodb://localhost:27017", {
-  maxPoolSize: 10,
-  serverSelectionTimeoutMS: 5000,
-  socketTimeoutMS: 45000,
+const datastore = new ChronoMongoDatastore<TaskMapping>({
+  uninitializedDatastoreBehavior: "queue",
+  maxQueueSize: 500, // Optional: limit the queue to prevent unbounded memory growth
 });
+```
 
-await client.connect();
-const db = client.db("production-app");
+**`'throw'`** -- Operations throw an error immediately if the datastore has not been initialized. Use this when you want to guarantee the database is connected before any operations are attempted.
 
-const datastore = await ChronoMongoDatastore.create<TaskMapping>(db, {
-  collectionName: "background-jobs", // Custom collection name
-  completedDocumentTTL: 86400, // Delete completed tasks after 24 hours
+```typescript
+const datastore = new ChronoMongoDatastore<TaskMapping>({
+  uninitializedDatastoreBehavior: "throw",
+});
+```
+
+## MongoDB Sessions
+
+The datastore supports MongoDB sessions for transactional task scheduling via `MongoDatastoreOptions`:
+
+```typescript
+import type { MongoDatastoreOptions } from "@neofinancial/chrono-mongo-datastore";
+
+const session = client.startSession();
+
+await session.withTransaction(async () => {
+  // Schedule a task within a transaction
+  await chrono.scheduleTask({
+    kind: "send-email",
+    when: new Date(),
+    data: { to: "user@example.com", subject: "Order confirmed", body: "..." },
+    datastoreOptions: { session },
+  });
+
+  // Other transactional operations...
 });
 ```
 
 ## MongoDB Schema
 
-The datastore automatically creates the following indexes for optimal performance:
+### Indexes
+
+The datastore automatically creates three indexes when `initialize()` is called:
+
+**Claim index** -- compound index for efficient task polling and claiming:
 
 ```javascript
-// Compound index for efficient task claiming
 { kind: 1, status: 1, scheduledAt: 1, priority: -1, claimedAt: 1 }
+// name: "chrono-claim-document-index"
+```
 
-// Index for idempotency key lookups
-{ idempotencyKey: 1 }
+**Idempotency key index** -- unique sparse index for deduplication:
 
-// Partial expression index using TTL to delete COMPLETED documents
-{ completedAt: -1 }
+```javascript
+{
+  idempotencyKey: 1;
+}
+// name: "chrono-idempotency-key-index", unique: true, sparse: true
+```
+
+**Completed document TTL index** -- partial TTL index that automatically removes completed tasks:
+
+```javascript
+{
+  completedAt: -1;
+}
+// name: "chrono-completed-document-ttl-index"
+// partialFilterExpression: { completedAt: { $exists: true }, status: "COMPLETED" }
+// expireAfterSeconds: <completedDocumentTTLSeconds or 2592000>
 ```
 
 ### Document Structure
@@ -189,8 +225,8 @@ Tasks are stored with the following structure:
 interface TaskDocument {
   _id: ObjectId;
   kind: string;
-  status: "pending" | "claimed" | "completed" | "failed";
-  data: any;
+  status: "PENDING" | "CLAIMED" | "COMPLETED" | "FAILED";
+  data: unknown;
   priority?: number;
   idempotencyKey?: string;
   originalScheduleDate: Date;
@@ -202,77 +238,31 @@ interface TaskDocument {
 }
 ```
 
-## Production Considerations
-
-### Connection Management
-
-```typescript
-// Use connection pooling for production
-const client = new MongoClient(connectionString, {
-  maxPoolSize: 10,
-  minPoolSize: 5,
-  maxIdleTimeMS: 30000,
-  serverSelectionTimeoutMS: 5000,
-});
-
-// Handle connection errors
-client.on("error", (error) => {
-  console.error("MongoDB connection error:", error);
-});
-```
-
-### Database Indexes
-
-The datastore will automatically create necessary indexes, but you may want to create them manually for production deployments:
-
-```javascript
-// In MongoDB shell or your migration scripts
-// Replace 'chrono-tasks' with your custom collection name if different
-db.chrono_tasks.createIndex({ completedAt: -1 }, {
-  partialFilterExpression: {
-    completedAt: { $exists: true },
-    status: { $eq: "COMPLETED" }
-  },
-  expireAfterSeconds: 2592000, // 30 days
-  name: "chrono-completed-document-ttl-index"
-});
-
-db.chrono_tasks.createIndex({
-  kind: 1,
-  status: 1,
-  scheduledAt: 1,
-  priority: -1,
-  claimedAt: 1
-}, {
-  name: "chrono-claim-document-index"
-});
-
-db.chrono_tasks.createIndex({
-  idempotencyKey: 1
-}, {
-  name: "chrono-idempotency-key-index",
-  unique: true,
-  sparse: true
-});
-
-### Monitoring
-
-Monitor these key metrics:
-
-- Task processing latency
-- Failed task count
-- MongoDB connection pool usage
-- Collection size and growth
-
 ## API Reference
 
-### ChronoMongoDatastore
+### `ChronoMongoDatastore`
 
-The main datastore class implementing the Chrono datastore interface.
+#### `constructor(config?: Partial<ChronoMongoDatastoreConfig>)`
 
-#### Methods
+Creates a new datastore instance. All configuration options are optional and have sensible defaults.
 
-All methods are implemented from the base Chrono datastore interface. See [@neofinancial/chrono](https://www.npmjs.com/package/@neofinancial/chrono) documentation for the complete API.
+#### `initialize(database: Db): Promise<void>`
+
+Sets the MongoDB database connection, creates required indexes, and flushes any queued operations. Must be called exactly once. Throws if called a second time.
+
+#### `getDatabase(): Promise<Db>`
+
+Returns the database connection. If the datastore is not yet initialized, behavior depends on `uninitializedDatastoreBehavior`:
+
+- `'queue'`: returns a promise that resolves when `initialize()` is called
+- `'throw'`: throws an error immediately
+
+All other methods (`schedule`, `delete`, `claim`, `retry`, `complete`, `fail`) implement the `Datastore` interface from `@neofinancial/chrono`. See the [chrono documentation](https://www.npmjs.com/package/@neofinancial/chrono) for details.
+
+### Exported Types
+
+- `ChronoMongoDatastoreConfig` -- configuration type
+- `MongoDatastoreOptions` -- `{ session?: ClientSession }` for transaction support
 
 ## License
 
@@ -284,6 +274,5 @@ This package is part of the [chrono monorepo](https://github.com/neofinancial/ch
 
 ## Related Packages
 
-- **[@neofinancial/chrono](https://www.npmjs.com/package/@neofinancial/chrono)**: Core task scheduling functionality
-- **[@neofinancial/chrono-memory-datastore](https://www.npmjs.com/package/@neofinancial/chrono-memory-datastore)**: In-memory datastore for development and testing
-```
+- [@neofinancial/chrono](https://www.npmjs.com/package/@neofinancial/chrono) -- Core task scheduling and processing
+- [@neofinancial/chrono-memory-datastore](https://www.npmjs.com/package/@neofinancial/chrono-memory-datastore) -- In-memory datastore for development and testing
