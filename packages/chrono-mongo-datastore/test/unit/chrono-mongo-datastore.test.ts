@@ -566,4 +566,56 @@ describe('ChronoMongoDatastore', () => {
       await dataStore.delete(new ObjectId().toHexString(), { force: true });
     });
   });
+
+  describe('uninitializedDatastoreBehavior', () => {
+    describe('config defaults', () => {
+      test('defaults to queue behavior when no config is provided', async () => {
+        const store = new ChronoMongoDatastore<TaskMapping>();
+
+        // Should not reject -- returns a pending promise (queue behavior)
+        await expect(Promise.race([store.getDatabase(), Promise.resolve('pending')])).resolves.toBe('pending');
+      });
+    });
+
+    describe('throw behavior', () => {
+      test('getDatabase() rejects when behavior is throw and datastore is not initialized', async () => {
+        const store = new ChronoMongoDatastore<TaskMapping>({
+          uninitializedDatastoreBehavior: 'throw',
+          collectionName: TEST_DB_COLLECTION_NAME,
+        });
+
+        await expect(store.getDatabase()).rejects.toThrow('Datastore is not initialized');
+      });
+    });
+
+    describe('maxQueueSize', () => {
+      test('allows up to maxQueueSize queued getDatabase() calls', async () => {
+        const store = new ChronoMongoDatastore<TaskMapping>({
+          uninitializedDatastoreBehavior: 'queue',
+          maxQueueSize: 2,
+          collectionName: TEST_DB_COLLECTION_NAME,
+        });
+
+        // Both calls should return pending promises without rejecting
+        const promise1 = store.getDatabase();
+        const promise2 = store.getDatabase();
+
+        await expect(Promise.race([promise1, Promise.resolve('pending')])).resolves.toBe('pending');
+        await expect(Promise.race([promise2, Promise.resolve('pending')])).resolves.toBe('pending');
+      });
+
+      test('rejects when maxQueueSize is exceeded', async () => {
+        const store = new ChronoMongoDatastore<TaskMapping>({
+          uninitializedDatastoreBehavior: 'queue',
+          maxQueueSize: 2,
+          collectionName: TEST_DB_COLLECTION_NAME,
+        });
+
+        store.getDatabase();
+        store.getDatabase();
+
+        await expect(store.getDatabase()).rejects.toThrow('Maximum queue size reached for uninitialized datastore');
+      });
+    });
+  });
 });
