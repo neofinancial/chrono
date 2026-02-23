@@ -32,15 +32,15 @@ export class ChronoPluginContext<TaskMapping extends TaskMappingBase, DatastoreO
   >;
 
   constructor(
-    private readonly _chrono: Chrono<TaskMapping, DatastoreOptions>,
+    chrono: Chrono<TaskMapping, DatastoreOptions>,
     private readonly processors: Map<keyof TaskMapping, Processor<keyof TaskMapping, TaskMapping>>,
     private readonly datastore: Datastore<TaskMapping, DatastoreOptions>,
   ) {
     this.chrono = {
-      registerTaskHandler: this._chrono.registerTaskHandler.bind(this._chrono),
-      use: this._chrono.use.bind(this._chrono),
-      scheduleTask: this._chrono.scheduleTask.bind(this._chrono),
-      deleteTask: this._chrono.deleteTask.bind(this._chrono),
+      registerTaskHandler: chrono.registerTaskHandler.bind(chrono),
+      use: chrono.use.bind(chrono),
+      scheduleTask: chrono.scheduleTask.bind(chrono),
+      deleteTask: chrono.deleteTask.bind(chrono),
     };
   }
 
