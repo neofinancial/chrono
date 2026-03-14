@@ -15,13 +15,13 @@ export interface PluginRegistrationContext<TaskMapping extends TaskMappingBase, 
      * Handlers are executed in registration order (FIFO).
      * @param handler - The handler to call, receiving a lifecycle context
      */
-    onStart(handler: (context: PluginLifecycleContext<TaskMapping>) => Promise<void> | void): void;
+    onStart(handler: (context: PluginLifecycleContext<TaskMapping, DatastoreOptions>) => Promise<void> | void): void;
 
     /**
      * Register a handler to be called when Chrono stops.
      * Handlers are executed in reverse registration order (LIFO).
      * @param handler - The handler to call, receiving a lifecycle context
      */
-    onStop(handler: (context: PluginLifecycleContext<TaskMapping>) => Promise<void> | void): void;
+    onStop(handler: (context: PluginLifecycleContext<TaskMapping, DatastoreOptions>) => Promise<void> | void): void;
   };
 }

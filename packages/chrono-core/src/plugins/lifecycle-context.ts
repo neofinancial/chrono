@@ -7,7 +7,7 @@ import type { ProcessorEventsMap } from '../processors/events';
  * Context passed to plugin lifecycle hooks (onStart, onStop).
  * Provides read-only access to Chrono runtime state.
  */
-export interface PluginLifecycleContext<TaskMapping extends TaskMappingBase> {
+export interface PluginLifecycleContext<TaskMapping extends TaskMappingBase, DatastoreOptions = unknown> {
   /**
    * Get the list of registered task kinds.
    * @returns An array of all registered task kinds
@@ -18,7 +18,7 @@ export interface PluginLifecycleContext<TaskMapping extends TaskMappingBase> {
    * Get the datastore instance.
    * @returns The datastore used by this Chrono instance
    */
-  getDatastore(): Datastore<TaskMapping, unknown>;
+  getDatastore(): Datastore<TaskMapping, DatastoreOptions>;
 
   /**
    * Get the event emitter for a specific processor by task kind.
