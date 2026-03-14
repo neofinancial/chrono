@@ -84,12 +84,12 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> exten
 
     this.started = true;
 
-    for (const processor of this.processors.values()) {
-      await processor.start();
-    }
-
     for (const context of this.pluginContexts) {
       await context.executeStartHooks();
+    }
+
+    for (const processor of this.processors.values()) {
+      await processor.start();
     }
 
     this.emit(ChronoEvents.STARTED, { startedAt: new Date() });
