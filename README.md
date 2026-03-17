@@ -8,10 +8,10 @@ A TypeScript task scheduling and processing system for reliable background job p
 
 This is a monorepo containing the core library and datastore implementations:
 
-| Package | Description |
-|---------|-------------|
-| [@neofinancial/chrono](packages/chrono-core) | Core task scheduling and processing engine |
-| [@neofinancial/chrono-mongo-datastore](packages/chrono-mongo-datastore) | MongoDB datastore for persistent task storage |
+| Package                                                                   | Description                                     |
+| ------------------------------------------------------------------------- | ----------------------------------------------- |
+| [@neofinancial/chrono](packages/chrono-core)                              | Core task scheduling and processing engine      |
+| [@neofinancial/chrono-mongo-datastore](packages/chrono-mongo-datastore)   | MongoDB datastore for persistent task storage   |
 | [@neofinancial/chrono-memory-datastore](packages/chrono-memory-datastore) | In-memory datastore for development and testing |
 
 ## Highlights
@@ -59,7 +59,7 @@ For MongoDB usage, see the [@neofinancial/chrono-mongo-datastore README](package
 
 ### Prerequisites
 
-- Node.js >= 22.14.0
+- Node.js >= 20.18.3
 - [PNPM](https://pnpm.io/installation#using-corepack) (via Corepack)
 
 ### Build
