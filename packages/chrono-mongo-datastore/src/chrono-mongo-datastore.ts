@@ -45,7 +45,8 @@ export type MongoDatastoreOptions = {
 export type TaskDocument<TaskKind, TaskData> = WithId<Omit<Task<TaskKind, TaskData>, 'id'>>;
 
 export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
-  implements Datastore<TaskMapping, MongoDatastoreOptions> {
+  implements Datastore<TaskMapping, MongoDatastoreOptions>
+{
   private config: ChronoMongoDatastoreConfig;
   private database: Db | undefined;
   private databaseResolvers: Array<(database: Db) => void> = [];
