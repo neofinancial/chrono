@@ -5,5 +5,3 @@ packages/**/build
 
 examples/**/tsconfig.tsbuildinfo
 examples/**/build
-
-.vscode
