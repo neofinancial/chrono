@@ -21,6 +21,28 @@ import { ensureIndexes, IndexNames } from './mongo-indexes';
 
 const DEFAULT_COLLECTION_NAME = 'chrono-tasks';
 
+/**
+ * Configuration for the datastore behavior when it is called before the datastore is initialized.
+ *
+ * @default { uninitializedDatastoreBehavior: 'queue', maxQueueSize: undefined }
+ */
+type UninitializedDatastoreBehaviorConfig =
+  /**
+   * Queue operations when the datastore is not initialized. If maxQueueSize is reached, an error will be thrown.
+   * If maxQueueSize is not defined, operations will be queued indefinitely.
+   * @throws {Error} If the maxQueueSize is reached.
+   */
+  | { uninitializedDatastoreBehavior: 'queue'; maxQueueSize?: number }
+  /**
+   * Throw an error when the datastore is accessed before it is initialized.
+   */
+  | { uninitializedDatastoreBehavior: 'throw' };
+
+/**
+ * Configuration for the ChronoMongoDatastore.
+ *
+ * @type {ChronoMongoDatastoreConfig}
+ */
 export type ChronoMongoDatastoreConfig = {
   /**
    * The TTL (in seconds) for completed documents.
@@ -36,7 +58,7 @@ export type ChronoMongoDatastoreConfig = {
    * @type {string}
    */
   collectionName: string;
-};
+} & UninitializedDatastoreBehaviorConfig;
 
 export type MongoDatastoreOptions = {
   session?: ClientSession;
@@ -52,9 +74,13 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
   private databaseResolvers: Array<(database: Db) => void> = [];
 
   constructor(config?: Partial<ChronoMongoDatastoreConfig>) {
+    const { completedDocumentTTLSeconds, collectionName, ...rest } = config || {};
+
     this.config = {
       completedDocumentTTLSeconds: config?.completedDocumentTTLSeconds,
       collectionName: config?.collectionName || DEFAULT_COLLECTION_NAME,
+      uninitializedDatastoreBehavior: rest.uninitializedDatastoreBehavior || 'queue',
+      ...(rest.uninitializedDatastoreBehavior === 'queue' ? { maxQueueSize: rest.maxQueueSize } : undefined),
     };
   }
 
@@ -81,13 +107,25 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
   }
 
   /**
-   * Asyncronously gets the database connection for the datastore. If the database is not set, it will return a promise that resolves when the database is set.
+   * Asynchronously gets the database connection for the datastore. If the database is not set, it will return a promise that resolves when the database is set.
    *
    * @returns The database connection.
    */
   public async getDatabase(): Promise<Db> {
     if (this.database) {
       return this.database;
+    }
+
+    if (this.config.uninitializedDatastoreBehavior === 'throw') {
+      throw new Error('Datastore is not initialized');
+    }
+
+    if (
+      this.config.uninitializedDatastoreBehavior === 'queue' &&
+      this.config.maxQueueSize !== undefined &&
+      this.databaseResolvers.length >= this.config.maxQueueSize
+    ) {
+      throw new Error('Maximum queue size reached for uninitialized datastore');
     }
 
     return new Promise<Db>((resolve) => {

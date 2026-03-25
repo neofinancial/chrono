@@ -5,3 +5,4 @@ packages/**/build
 
 examples/**/tsconfig.tsbuildinfo
 examples/**/build
+.DS_Store

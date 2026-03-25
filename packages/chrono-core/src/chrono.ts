@@ -3,6 +3,8 @@ import { EventEmitter } from 'node:events';
 import type { BackoffStrategyOptions } from './backoff-strategy';
 import type { Datastore, ScheduleInput, Task } from './datastore';
 import { ChronoEvents, type ChronoEventsMap } from './events';
+import type { ChronoPlugin } from './plugins';
+import { ChronoPluginContext } from './plugins/chrono-plugin-context';
 import { createProcessor, type Processor } from './processors';
 import type { ProcessorConfiguration } from './processors/create-processor';
 import type { ProcessorEventsMap } from './processors/events';
@@ -44,6 +46,8 @@ export type RegisterTaskHandlerResponse<
 export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> extends EventEmitter<ChronoEventsMap> {
   private readonly datastore: Datastore<TaskMapping, DatastoreOptions>;
   private readonly processors: Map<keyof TaskMapping, Processor<keyof TaskMapping, TaskMapping>> = new Map();
+  private readonly pluginContexts: ChronoPluginContext<TaskMapping, DatastoreOptions>[] = [];
+  private started = false;
 
   readonly exitTimeoutMs = 60_000;
 
@@ -53,7 +57,37 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> exten
     this.datastore = datastore;
   }
 
+  /**
+   * Register a plugin with Chrono.
+   * Plugins must be registered before calling start().
+   * @param plugin - The plugin to register
+   * @returns The plugin's API (if any) for type-safe access to plugin functionality
+   */
+  use<PluginAPI>(plugin: ChronoPlugin<TaskMapping, DatastoreOptions, PluginAPI>): PluginAPI {
+    if (this.started) {
+      throw new Error(`Cannot register plugin "${plugin.name}" after Chrono has started`);
+    }
+
+    const context = new ChronoPluginContext<TaskMapping, DatastoreOptions>(this, this.processors, this.datastore);
+
+    const api = plugin.register(context);
+
+    this.pluginContexts.push(context);
+
+    return api;
+  }
+
   public async start(): Promise<void> {
+    if (this.started) {
+      return;
+    }
+
+    this.started = true;
+
+    for (const context of this.pluginContexts) {
+      await context.executeStartHooks();
+    }
+
     for (const processor of this.processors.values()) {
       await processor.start();
     }
@@ -62,6 +96,11 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> exten
   }
 
   public async stop(): Promise<void> {
+    // Execute plugin stop hooks first (in reverse order - LIFO)
+    for (const context of [...this.pluginContexts].reverse()) {
+      await context.executeStopHooks();
+    }
+
     const stopPromises = Array.from(this.processors.values()).map((processor) => processor.stop());
 
     try {
