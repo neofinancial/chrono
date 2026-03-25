@@ -45,8 +45,7 @@ export type MongoDatastoreOptions = {
 export type TaskDocument<TaskKind, TaskData> = WithId<Omit<Task<TaskKind, TaskData>, 'id'>>;
 
 export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
-  implements Datastore<TaskMapping, MongoDatastoreOptions>
-{
+  implements Datastore<TaskMapping, MongoDatastoreOptions> {
   private config: ChronoMongoDatastoreConfig;
   private database: Db | undefined;
   private databaseResolvers: Array<(database: Db) => void> = [];
@@ -158,10 +157,13 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     const filter =
       typeof key === 'string' ? { _id: new ObjectId(key) } : { kind: key.kind, idempotencyKey: key.idempotencyKey };
     const collection = await this.collection<TaskKind>();
-    const task = await collection.findOneAndDelete({
-      ...filter,
-      ...(options?.force ? {} : { status: TaskStatus.PENDING }),
-    });
+    const task = await collection.findOneAndDelete(
+      {
+        ...filter,
+        ...(options?.force ? {} : { status: TaskStatus.PENDING }),
+      },
+      { includeResultMetadata: false },
+    );
 
     if (!task) {
       if (options?.force) {
@@ -203,6 +205,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
         sort: { priority: -1, scheduledAt: 1 },
         // hint: IndexNames.CLAIM_DOCUMENT_INDEX as unknown as Document,
         returnDocument: 'after',
+        includeResultMetadata: false,
       },
     );
 
@@ -260,6 +263,7 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     const collection = await this.collection<TaskKind>();
     const document = await collection.findOneAndUpdate({ _id: new ObjectId(taskId) }, update, {
       returnDocument: 'after',
+      includeResultMetadata: false,
     });
 
     if (!document) {
