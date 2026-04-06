@@ -19,15 +19,15 @@ jobs:
 
     steps:
       - name: Perform source code checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node version
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node-version }}
 
       - name: Cache Package Node Modules
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.pnpm-store
@@ -39,8 +39,7 @@ jobs:
 
       - name: Install
         run: |
-          npm install -g npm@^11.2.0
-          npm install -g pnpm@latest-10
+          corepack enable
           pnpm install
 
       - name: Build
