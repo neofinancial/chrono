@@ -1,5 +1,6 @@
 export {
   Chrono,
+  type ChronoHandlerRegistrar,
   type RegisterTaskHandlerInput,
   type RegisterTaskHandlerResponse,
   type ScheduleTaskInput,
