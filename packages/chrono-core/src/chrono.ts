@@ -39,11 +39,30 @@ export type RegisterTaskHandlerResponse<
 > = EventEmitter<ProcessorEventsMap<TaskKind, TaskMapping>>;
 
 /**
+ * A covariant interface exposing only task handler registration.
+ *
+ * Because `registerTaskHandler` only puts `TaskMapping` in covariant positions
+ * (task data flows *out* to the handler callback), this interface can be annotated
+ * `out TaskMapping`. This lets a `Chrono<BigMapping>` satisfy
+ * `ChronoHandlerRegistrar<SmallMapping>` whenever `BigMapping extends SmallMapping`,
+ * which is the key property needed to pass a single wide Chrono to multiple
+ * narrowly-typed outbox handlers without any casts.
+ */
+export interface ChronoHandlerRegistrar<out TaskMapping extends TaskMappingBase> {
+  registerTaskHandler<TaskKind extends Extract<keyof TaskMapping, string>>(
+    input: RegisterTaskHandlerInput<TaskKind, TaskMapping[TaskKind]>,
+  ): RegisterTaskHandlerResponse<TaskKind, TaskMapping>;
+}
+
+/**
  * The main class for scheduling and processing tasks.
  * @param datastore - The datastore instance to use for storing and retrieving tasks.
  * @returns The Chrono instance that can be used to start and stop the processors as well as receive chrono instance events.
  */
-export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions> extends EventEmitter<ChronoEventsMap> {
+export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions>
+  extends EventEmitter<ChronoEventsMap>
+  implements ChronoHandlerRegistrar<TaskMapping>
+{
   private readonly datastore: Datastore<TaskMapping, DatastoreOptions>;
   private readonly processors: Map<keyof TaskMapping, Processor<keyof TaskMapping, TaskMapping>> = new Map();
   private readonly pluginContexts: ChronoPluginContext<TaskMapping, DatastoreOptions>[] = [];
