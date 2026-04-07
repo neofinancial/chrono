@@ -39,7 +39,8 @@ jobs:
 
       - name: Install
         run: |
-          corepack enable
+          npm install -g npm@^11.2.0
+          npm install -g pnpm@latest-10
           pnpm install
 
       - name: Build
