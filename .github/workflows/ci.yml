@@ -15,7 +15,8 @@ jobs:
     timeout-minutes: 10
     strategy:
       matrix:
-        node-version: [20.x, 22.x, 24.x]
+        # 22.22.2+ toolcache ships a broken global npm (missing promise-retry); pin until fixed upstream.
+        node-version: [20.x, 22.22.1, 24.x]
 
     steps:
       - name: Perform source code checkout
@@ -39,8 +40,8 @@ jobs:
 
       - name: Install
         run: |
-          npm install -g npm@^11.2.0
-          npm install -g pnpm@latest-10
+          npm install -g npm@11.2.0
+          npm install -g pnpm@10.30.0
           pnpm install
 
       - name: Build
