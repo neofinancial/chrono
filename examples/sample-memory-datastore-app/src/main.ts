@@ -1,4 +1,10 @@
-import { Chrono, ChronoEvents, ProcessorEvents } from '@neofinancial/chrono';
+import {
+  Chrono,
+  ChronoEvents,
+  type ChronoHandlerRegistrar,
+  type ChronoTaskScheduler,
+  ProcessorEvents,
+} from '@neofinancial/chrono';
 import { ChronoMemoryDatastore } from '@neofinancial/chrono-memory-datastore';
 
 type DatastoreOptions = undefined;
@@ -8,20 +14,12 @@ type TaskMapping = {
   'send-email': { url: string };
 };
 
-async function main() {
-  const memoryDatastore = new ChronoMemoryDatastore<TaskMapping, DatastoreOptions>();
-  const chrono = new Chrono<TaskMapping, DatastoreOptions>(memoryDatastore);
-
-  chrono.on(ChronoEvents.STARTED, ({ startedAt }) => {
-    console.log('Chrono successfully started and polling tasks', startedAt);
-  });
-
-  chrono.on(ChronoEvents.STOP_ABORTED, ({ error, timestamp }) => {
-    console.error('Chrono failed to shutdown gracefully', timestamp, error);
-  });
-
-  // Register task handlers
-  const processor1 = chrono.registerTaskHandler({
+/**
+ * Consumers only need `ChronoHandlerRegistrar` -- they never see `use()` or
+ * `scheduleTask()`, which keeps the type covariant in TaskMapping.
+ */
+function registerHandlers(registrar: ChronoHandlerRegistrar<TaskMapping>) {
+  const processor1 = registrar.registerTaskHandler({
     kind: 'async-messaging',
     handler: async (task) => {
       console.log('async-messaging task handler:', task);
@@ -33,7 +31,7 @@ async function main() {
     },
   });
 
-  const processor2 = chrono.registerTaskHandler({
+  const processor2 = registrar.registerTaskHandler({
     kind: 'send-email',
     handler: async (task) => {
       console.log('send-email task handler:', task);
@@ -47,33 +45,56 @@ async function main() {
     },
   });
 
-  // you can attach event listeners to the processors
-  const taskCompletions = [
-    new Promise((resolve) => processor1.once(ProcessorEvents.TASK_COMPLETED, resolve)),
-    new Promise((resolve) => processor2.once(ProcessorEvents.TASK_COMPLETED, resolve)),
-  ];
+  return { processor1, processor2 };
+}
 
-  // Start the Chrono instance
-  await chrono.start();
-
-  // Try scheduling tasks
-  await chrono.scheduleTask({
+/**
+ * Producers only need `ChronoTaskScheduler` -- they can schedule tasks without
+ * access to handler registration or plugin methods.
+ */
+async function scheduleTasks(scheduler: ChronoTaskScheduler<TaskMapping, DatastoreOptions>) {
+  await scheduler.scheduleTask({
     when: new Date(),
     kind: 'async-messaging',
     data: { someField: 123 },
   });
 
-  await chrono.scheduleTask({
+  await scheduler.scheduleTask({
     when: new Date(),
     kind: 'send-email',
     data: { url: 'https://example.com' },
   });
+}
+
+async function main() {
+  const memoryDatastore = new ChronoMemoryDatastore<TaskMapping, DatastoreOptions>();
+  const chrono = new Chrono<TaskMapping, DatastoreOptions>(memoryDatastore);
+
+  chrono.on(ChronoEvents.STARTED, ({ startedAt }) => {
+    console.log('Chrono successfully started and polling tasks', startedAt);
+  });
+
+  chrono.on(ChronoEvents.STOP_ABORTED, ({ error, timestamp }) => {
+    console.error('Chrono failed to shutdown gracefully', timestamp, error);
+  });
+
+  // Chrono satisfies both ChronoHandlerRegistrar and ChronoTaskScheduler,
+  // so it can be passed directly to narrowly-typed functions.
+  const { processor1, processor2 } = registerHandlers(chrono);
+
+  const taskCompletions = [
+    new Promise((resolve) => processor1.once(ProcessorEvents.TASK_COMPLETED, resolve)),
+    new Promise((resolve) => processor2.once(ProcessorEvents.TASK_COMPLETED, resolve)),
+  ];
+
+  await chrono.start();
+
+  await scheduleTasks(chrono);
 
   await Promise.all(taskCompletions);
 
   console.log('stopping the Chrono instance...');
 
-  // Finallly, stop the Chrono instance
   await chrono.stop();
 
   console.log('Chrono instance stopped.');

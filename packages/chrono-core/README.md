@@ -351,6 +351,8 @@ See the existing implementations for reference:
 | `scheduleTask` | `scheduleTask(input): Promise<Task>` | Schedule a task for processing |
 | `deleteTask` | `deleteTask(taskId): Promise<Task \| undefined>` | Delete a task by ID |
 
+`Chrono` implements `ChronoTaskScheduler` and `ChronoHandlerRegistrar`, so a `Chrono` instance can be passed wherever those narrower types are expected. Use the narrow interfaces to limit what callers can do -- for example, pass `ChronoTaskScheduler` to code that only needs to schedule tasks, or `ChronoHandlerRegistrar` to code that only registers handlers.
+
 ### Exported Types
 
 | Export | Kind | Description |
@@ -362,6 +364,8 @@ See the existing implementations for reference:
 | `ChronoPlugin` | Interface | Plugin interface |
 | `PluginRegistrationContext` | Interface | Context given to plugins during `register()` |
 | `PluginLifecycleContext` | Interface | Context given to lifecycle hook handlers |
+| `ChronoTaskScheduler` | Interface | Narrow interface exposing only `scheduleTask()` -- use to type producer dependencies |
+| `ChronoHandlerRegistrar` | Interface | Narrow interface exposing only `registerTaskHandler()` -- use to type consumer dependencies |
 | `Datastore` | Interface | Datastore interface for custom implementations |
 | `Task` | Type | Task document type |
 | `TaskMappingBase` | Type | Base type constraint for task mappings |

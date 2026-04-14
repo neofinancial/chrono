@@ -39,6 +39,21 @@ export type RegisterTaskHandlerResponse<
 > = EventEmitter<ProcessorEventsMap<TaskKind, TaskMapping>>;
 
 /**
+ * A narrow interface exposing only task scheduling.
+ *
+ * Producers only need `scheduleTask()`, not `use()` or `registerTaskHandler()`.
+ * By hiding the invariance-inducing `use()` method, a `Chrono<BigMapping>`
+ * satisfies `ChronoTaskScheduler<SmallMapping>` whenever `BigMapping` is a
+ * superset of `SmallMapping`, because the generic method constraint narrows
+ * `TaskKind` to keys present in both mappings where the value types are identical.
+ */
+export interface ChronoTaskScheduler<TaskMapping extends TaskMappingBase, DatastoreOptions> {
+  scheduleTask<TaskKind extends keyof TaskMapping>(
+    input: ScheduleTaskInput<TaskKind, TaskMapping[TaskKind], DatastoreOptions>,
+  ): Promise<Task<TaskKind, TaskMapping[TaskKind]>>;
+}
+
+/**
  * A covariant interface exposing only task handler registration.
  *
  * Because `registerTaskHandler` only puts `TaskMapping` in covariant positions
@@ -61,7 +76,7 @@ export interface ChronoHandlerRegistrar<out TaskMapping extends TaskMappingBase>
  */
 export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions>
   extends EventEmitter<ChronoEventsMap>
-  implements ChronoHandlerRegistrar<TaskMapping>
+  implements ChronoHandlerRegistrar<TaskMapping>, ChronoTaskScheduler<TaskMapping, DatastoreOptions>
 {
   private readonly datastore: Datastore<TaskMapping, DatastoreOptions>;
   private readonly processors: Map<keyof TaskMapping, Processor<keyof TaskMapping, TaskMapping>> = new Map();
