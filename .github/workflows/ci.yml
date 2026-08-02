@@ -41,7 +41,7 @@ jobs:
         run: |
           npm install -g npm@11.2.0
           npm install -g pnpm@10.30.0
-          pnpm install
+          pnpm install --ignore-scripts
 
       - name: Build
         run: pnpm run build
