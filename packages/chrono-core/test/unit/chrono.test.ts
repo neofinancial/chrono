@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test, vitest } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 
-import { Chrono } from '../../src/chrono';
+import type { BulkDatastore } from '../../src/bulk-datastore';
+import { Chrono, type RegisterTaskHandlerBulkInput, type RegisterTaskHandlerInput } from '../../src/chrono';
 import type { Datastore } from '../../src/datastore';
 import type { ChronoPlugin } from '../../src/plugins';
+import { BulkProcessor } from '../../src/processors/bulk-processor';
 import { SimpleProcessor } from '../../src/processors/simple-processor';
 import { defineTaskFactory } from '../factories/task.factory';
 
@@ -159,6 +161,59 @@ describe('Chrono', () => {
       });
 
       expect(result).toBeInstanceOf(SimpleProcessor);
+    });
+
+    test('registers a bulk task handler when the datastore supports bulk operations', () => {
+      const bulkDatastore = mock<
+        Datastore<TaskMapping, DatastoreOptions> & BulkDatastore<TaskMapping, DatastoreOptions>
+      >();
+      Object.assign(bulkDatastore, {
+        schedule: async () => {
+          throw new Error('not implemented');
+        },
+        delete: async () => undefined,
+        claim: async () => undefined,
+        retry: async () => {
+          throw new Error('not implemented');
+        },
+        complete: async () => {
+          throw new Error('not implemented');
+        },
+        fail: async () => {
+          throw new Error('not implemented');
+        },
+        claimMany: async () => [],
+        completeMany: async () => ({ succeeded: [], failed: [] }),
+        retryMany: async () => ({ succeeded: [], failed: [] }),
+        failMany: async () => ({ succeeded: [], failed: [] }),
+      });
+
+      const bulkChrono = new Chrono<TaskMapping, DatastoreOptions, typeof bulkDatastore>(bulkDatastore);
+
+      const result = bulkChrono.registerTaskHandler({
+        kind: 'send-test-task',
+        handler: vitest.fn(),
+        processorConfiguration: { type: 'bulk', batchSize: 10 },
+      });
+
+      expect(result).toBeInstanceOf(BulkProcessor);
+    });
+
+    test('throws when registering a bulk task handler with a non-bulk datastore', () => {
+      const handler = vitest.fn();
+      const input: RegisterTaskHandlerBulkInput<'send-test-task', TaskData> = {
+        kind: 'send-test-task',
+        handler,
+        processorConfiguration: { type: 'bulk', batchSize: 10 },
+      };
+
+      const registerTaskHandler = chrono.registerTaskHandler.bind(chrono) as (
+        input: RegisterTaskHandlerInput<'send-test-task', TaskData>,
+      ) => ReturnType<Chrono<TaskMapping, DatastoreOptions>['registerTaskHandler']>;
+
+      expect(() => registerTaskHandler(input)).toThrow(
+        'Bulk processor requires a datastore that implements BulkDatastore',
+      );
     });
   });
 

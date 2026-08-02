@@ -1,9 +1,18 @@
 export {
+  type BulkDatastore,
+  type BulkWriteResult,
+  type ClaimManyInput,
+  isBulkDatastore,
+  type RetryManyItem,
+} from './bulk-datastore';
+export {
   Chrono,
   type ChronoHandlerRegistrar,
   type ChronoTaskScheduler,
+  type RegisterTaskHandlerBulkInput,
   type RegisterTaskHandlerInput,
   type RegisterTaskHandlerResponse,
+  type RegisterTaskHandlerSimpleInput,
   type ScheduleTaskInput,
   type TaskMappingBase,
 } from './chrono';
@@ -23,4 +32,13 @@ export type {
   PluginLifecycleContext,
   PluginRegistrationContext,
 } from './plugins';
-export { ProcessorEvents, type ProcessorEventsMap } from './processors';
+export {
+  BulkProcessor,
+  type BulkProcessorConfiguration,
+  createProcessor,
+  type ProcessorConfiguration,
+  ProcessorEvents,
+  type ProcessorEventsMap,
+  SimpleProcessor,
+  type SimpleProcessorConfiguration,
+} from './processors';

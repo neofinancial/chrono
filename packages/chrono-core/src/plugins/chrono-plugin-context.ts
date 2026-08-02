@@ -11,38 +11,41 @@ import type { PluginRegistrationContext } from './registration-context';
  * Provides plugins with access to Chrono methods and manages lifecycle hooks.
  * @internal
  */
-export class ChronoPluginContext<TaskMapping extends TaskMappingBase, DatastoreOptions>
-  implements PluginRegistrationContext<TaskMapping, DatastoreOptions>
+export class ChronoPluginContext<
+  TaskMapping extends TaskMappingBase,
+  DatastoreOptions,
+  DatastoreImpl extends Datastore<TaskMapping, DatastoreOptions> = Datastore<TaskMapping, DatastoreOptions>,
+> implements PluginRegistrationContext<TaskMapping, DatastoreOptions, DatastoreImpl>
 {
   private readonly startHooks: Array<
-    (context: PluginLifecycleContext<TaskMapping, DatastoreOptions>) => Promise<void> | void
+    (context: PluginLifecycleContext<TaskMapping, DatastoreOptions, DatastoreImpl>) => Promise<void> | void
   > = [];
   private readonly stopHooks: Array<
-    (context: PluginLifecycleContext<TaskMapping, DatastoreOptions>) => Promise<void> | void
+    (context: PluginLifecycleContext<TaskMapping, DatastoreOptions, DatastoreImpl>) => Promise<void> | void
   > = [];
 
   readonly hooks = {
     onStart: (
-      handler: (context: PluginLifecycleContext<TaskMapping, DatastoreOptions>) => Promise<void> | void,
+      handler: (context: PluginLifecycleContext<TaskMapping, DatastoreOptions, DatastoreImpl>) => Promise<void> | void,
     ): void => {
       this.startHooks.push(handler);
     },
     onStop: (
-      handler: (context: PluginLifecycleContext<TaskMapping, DatastoreOptions>) => Promise<void> | void,
+      handler: (context: PluginLifecycleContext<TaskMapping, DatastoreOptions, DatastoreImpl>) => Promise<void> | void,
     ): void => {
       this.stopHooks.push(handler);
     },
   };
 
   public readonly chrono: Pick<
-    Chrono<TaskMapping, DatastoreOptions>,
+    Chrono<TaskMapping, DatastoreOptions, DatastoreImpl>,
     'registerTaskHandler' | 'use' | 'scheduleTask' | 'deleteTask'
   >;
 
   constructor(
-    chrono: Chrono<TaskMapping, DatastoreOptions>,
+    chrono: Chrono<TaskMapping, DatastoreOptions, DatastoreImpl>,
     private readonly processors: Map<keyof TaskMapping, Processor<keyof TaskMapping, TaskMapping>>,
-    private readonly datastore: Datastore<TaskMapping, DatastoreOptions>,
+    private readonly datastore: DatastoreImpl,
   ) {
     this.chrono = {
       registerTaskHandler: chrono.registerTaskHandler.bind(chrono),
@@ -55,7 +58,7 @@ export class ChronoPluginContext<TaskMapping extends TaskMappingBase, DatastoreO
   /**
    * Create a lifecycle context for passing to hook handlers.
    */
-  private createLifecycleContext(): PluginLifecycleContext<TaskMapping, DatastoreOptions> {
+  private createLifecycleContext(): PluginLifecycleContext<TaskMapping, DatastoreOptions, DatastoreImpl> {
     return {
       getRegisteredTaskKinds: () => Array.from(this.processors.keys()),
       getDatastore: () => this.datastore,

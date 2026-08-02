@@ -18,6 +18,8 @@
     "module": "NodeNext",
     "moduleResolution": "nodenext",
 
-    "lib": ["es2022"]
+    "lib": ["es2022"],
+
+    "types": ["node"]
   }
 }

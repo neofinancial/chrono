@@ -172,13 +172,18 @@ Delay doubles each retry with an optional cap and jitter.
 
 ## Processor Configuration
 
-Each task handler runs on a processor that polls the datastore for tasks. Configure processor behavior via `processorConfiguration`:
+Each task handler runs on a processor that polls the datastore for tasks. Configure processor behavior via `processorConfiguration`.
+
+### Simple processor (default)
+
+Claims and processes one task at a time per worker loop:
 
 ```typescript
 chrono.registerTaskHandler({
   kind: "send-email",
   handler: async (task) => { /* ... */ },
   processorConfiguration: {
+    type: "simple", // optional — this is the default
     maxConcurrency: 5,
     claimIntervalMs: 100,
     taskHandlerTimeoutMs: 30_000,
@@ -187,7 +192,7 @@ chrono.registerTaskHandler({
 });
 ```
 
-### Options
+#### Simple processor options
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
@@ -197,6 +202,37 @@ chrono.registerTaskHandler({
 | `idleIntervalMs` | `number` | `5000` | Interval in ms between claim attempts when no tasks are available |
 | `taskHandlerTimeoutMs` | `number` | `5000` | Maximum time in ms a task handler can run before timing out |
 | `taskHandlerMaxRetries` | `number` | `5` | Maximum number of retries before a task is marked as failed |
+| `processLoopRetryIntervalMs` | `number` | `20000` | Interval in ms before retrying after an unexpected error in the processing loop |
+
+### Bulk processor
+
+Claims and processes tasks in batches. Requires a datastore that implements `BulkDatastore` (for example `ChronoMongoDatastore`):
+
+```typescript
+chrono.registerTaskHandler({
+  kind: "send-email",
+  handler: async (task) => { /* ... */ },
+  processorConfiguration: {
+    type: "bulk",
+    batchSize: 50,
+    batchIntervalMs: 1_000,
+    taskHandlerTimeoutMs: 30_000,
+    taskHandlerMaxRetries: 10,
+  },
+});
+```
+
+`type: "bulk"` is only accepted when the `Chrono` instance was constructed with a bulk-capable datastore. TypeScript will report a compile-time error otherwise; a runtime guard also throws if bulk configuration is used with a non-bulk datastore.
+
+#### Bulk processor options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `batchSize` | `number` | `25` | Maximum number of tasks to claim per batch |
+| `claimStaleTimeoutMs` | `number` | `10000` | Time in ms before a claimed task is considered stale and can be re-claimed |
+| `taskHandlerTimeoutMs` | `number` | `5000` | Maximum time in ms a task handler can run before timing out |
+| `taskHandlerMaxRetries` | `number` | `5` | Maximum number of retries before a task is marked as failed |
+| `batchIntervalMs` | `number` | `5000` | Interval in ms between batch processing loop iterations |
 | `processLoopRetryIntervalMs` | `number` | `20000` | Interval in ms before retrying after an unexpected error in the processing loop |
 
 ## Events
@@ -370,8 +406,20 @@ See the existing implementations for reference:
 | `Task` | Type | Task document type |
 | `TaskMappingBase` | Type | Base type constraint for task mappings |
 | `ScheduleTaskInput` | Type | Input type for `scheduleTask()` |
-| `RegisterTaskHandlerInput` | Type | Input type for `registerTaskHandler()` |
+| `RegisterTaskHandlerInput` | Type | Discriminated union input type for `registerTaskHandler()` (simple or bulk) |
+| `RegisterTaskHandlerSimpleInput` | Type | Simple processor registration input |
+| `RegisterTaskHandlerBulkInput` | Type | Bulk processor registration input (`type: 'bulk'` required) |
 | `RegisterTaskHandlerResponse` | Type | Return type of `registerTaskHandler()` |
+| `ProcessorConfiguration` | Type | Processor configuration union (`simple` \| `bulk`) |
+| `SimpleProcessor` | Class | Simple (single-task) processor implementation |
+| `SimpleProcessorConfiguration` | Type | Configuration for the simple processor |
+| `BulkProcessor` | Class | Bulk (batch) processor implementation |
+| `BulkProcessorConfiguration` | Type | Configuration for the bulk processor |
+| `BulkDatastore` | Interface | Bulk datastore interface (`claimMany`, `completeMany`, etc.) |
+| `isBulkDatastore` | Function | Runtime guard for `BulkDatastore` support |
+| `BulkWriteResult` | Type | Result type for bulk datastore write operations |
+| `ClaimManyInput` | Type | Input type for `claimMany()` |
+| `RetryManyItem` | Type | Input item type for `retryMany()` |
 | `ScheduleInput` | Type | Datastore-level schedule input |
 | `ClaimTaskInput` | Type | Datastore-level claim input |
 | `DeleteInput` | Type | Datastore-level delete input |

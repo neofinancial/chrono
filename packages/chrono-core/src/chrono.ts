@@ -1,13 +1,16 @@
 import { EventEmitter } from 'node:events';
 
 import type { BackoffStrategyOptions } from './backoff-strategy';
+import { type BulkDatastore, isBulkDatastore } from './bulk-datastore';
 import type { Datastore, ScheduleInput, Task } from './datastore';
 import { ChronoEvents, type ChronoEventsMap } from './events';
 import type { ChronoPlugin } from './plugins';
 import { ChronoPluginContext } from './plugins/chrono-plugin-context';
 import { createProcessor, type Processor } from './processors';
+import type { BulkProcessorConfiguration } from './processors/bulk-processor';
 import type { ProcessorConfiguration } from './processors/create-processor';
 import type { ProcessorEventsMap } from './processors/events';
+import type { SimpleProcessorConfiguration } from './processors/simple-processor';
 import { promiseWithTimeout } from './utils/promise-utils';
 
 export type TaskMappingBase = Record<string, unknown>;
@@ -18,16 +21,34 @@ export type ScheduleTaskInput<TaskKind, TaskData, DatastoreOptions> = ScheduleIn
   DatastoreOptions
 >;
 
-export type RegisterTaskHandlerInput<TaskKind, TaskData> = {
+type RegisterTaskHandlerBase<TaskKind, TaskData> = {
   /** The type of task */
   kind: TaskKind;
   /** The handler function to process the task */
   handler: (task: Task<TaskKind, TaskData>) => Promise<void>;
   /** The options for the backoff strategy to use when the task handler fails */
   backoffStrategyOptions?: BackoffStrategyOptions;
-  /** The configuration for the processor to use when processing the task */
-  processorConfiguration?: ProcessorConfiguration;
 };
+
+export type RegisterTaskHandlerSimpleInput<TaskKind, TaskData> = RegisterTaskHandlerBase<TaskKind, TaskData> & {
+  /** The configuration for the simple processor to use when processing the task */
+  processorConfiguration?: Partial<SimpleProcessorConfiguration> & { type?: 'simple' };
+};
+
+export type RegisterTaskHandlerBulkInput<TaskKind, TaskData> = RegisterTaskHandlerBase<TaskKind, TaskData> & {
+  /** The configuration for the bulk processor to use when processing the task */
+  processorConfiguration: Partial<BulkProcessorConfiguration> & { type: 'bulk' };
+};
+
+export type RegisterTaskHandlerInput<TaskKind, TaskData> =
+  | RegisterTaskHandlerSimpleInput<TaskKind, TaskData>
+  | RegisterTaskHandlerBulkInput<TaskKind, TaskData>;
+
+type BulkDatastoreRegistrationCheck<
+  TaskMapping extends TaskMappingBase,
+  DatastoreOptions,
+  DatastoreImpl extends Datastore<TaskMapping, DatastoreOptions>,
+> = DatastoreImpl extends BulkDatastore<TaskMapping, DatastoreOptions> ? unknown : never;
 
 /**
  * Response from registering a task handler.
@@ -63,9 +84,18 @@ export interface ChronoTaskScheduler<TaskMapping extends TaskMappingBase, Datast
  * which is the key property needed to pass a single wide Chrono to multiple
  * narrowly-typed outbox handlers without any casts.
  */
-export interface ChronoHandlerRegistrar<out TaskMapping extends TaskMappingBase> {
+export interface ChronoHandlerRegistrar<
+  TaskMapping extends TaskMappingBase,
+  DatastoreOptions,
+  DatastoreImpl extends Datastore<TaskMapping, DatastoreOptions> = Datastore<TaskMapping, DatastoreOptions>,
+> {
   registerTaskHandler<TaskKind extends Extract<keyof TaskMapping, string>>(
-    input: RegisterTaskHandlerInput<TaskKind, TaskMapping[TaskKind]>,
+    input: RegisterTaskHandlerSimpleInput<TaskKind, TaskMapping[TaskKind]>,
+  ): RegisterTaskHandlerResponse<TaskKind, TaskMapping>;
+
+  registerTaskHandler<TaskKind extends Extract<keyof TaskMapping, string>>(
+    input: RegisterTaskHandlerBulkInput<TaskKind, TaskMapping[TaskKind]> &
+      BulkDatastoreRegistrationCheck<TaskMapping, DatastoreOptions, DatastoreImpl>,
   ): RegisterTaskHandlerResponse<TaskKind, TaskMapping>;
 }
 
@@ -74,18 +104,24 @@ export interface ChronoHandlerRegistrar<out TaskMapping extends TaskMappingBase>
  * @param datastore - The datastore instance to use for storing and retrieving tasks.
  * @returns The Chrono instance that can be used to start and stop the processors as well as receive chrono instance events.
  */
-export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions>
+export class Chrono<
+    TaskMapping extends TaskMappingBase,
+    DatastoreOptions,
+    DatastoreImpl extends Datastore<TaskMapping, DatastoreOptions> = Datastore<TaskMapping, DatastoreOptions>,
+  >
   extends EventEmitter<ChronoEventsMap>
-  implements ChronoHandlerRegistrar<TaskMapping>, ChronoTaskScheduler<TaskMapping, DatastoreOptions>
+  implements
+    ChronoHandlerRegistrar<TaskMapping, DatastoreOptions, DatastoreImpl>,
+    ChronoTaskScheduler<TaskMapping, DatastoreOptions>
 {
-  private readonly datastore: Datastore<TaskMapping, DatastoreOptions>;
+  private readonly datastore: DatastoreImpl;
   private readonly processors: Map<keyof TaskMapping, Processor<keyof TaskMapping, TaskMapping>> = new Map();
-  private readonly pluginContexts: ChronoPluginContext<TaskMapping, DatastoreOptions>[] = [];
+  private readonly pluginContexts: ChronoPluginContext<TaskMapping, DatastoreOptions, DatastoreImpl>[] = [];
   private started = false;
 
   readonly exitTimeoutMs = 60_000;
 
-  constructor(datastore: Datastore<TaskMapping, DatastoreOptions>) {
+  constructor(datastore: DatastoreImpl) {
     super();
 
     this.datastore = datastore;
@@ -97,12 +133,16 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions>
    * @param plugin - The plugin to register
    * @returns The plugin's API (if any) for type-safe access to plugin functionality
    */
-  use<PluginAPI>(plugin: ChronoPlugin<TaskMapping, DatastoreOptions, PluginAPI>): PluginAPI {
+  use<PluginAPI>(plugin: ChronoPlugin<TaskMapping, DatastoreOptions, PluginAPI, DatastoreImpl>): PluginAPI {
     if (this.started) {
       throw new Error(`Cannot register plugin "${plugin.name}" after Chrono has started`);
     }
 
-    const context = new ChronoPluginContext<TaskMapping, DatastoreOptions>(this, this.processors, this.datastore);
+    const context = new ChronoPluginContext<TaskMapping, DatastoreOptions, DatastoreImpl>(
+      this,
+      this.processors,
+      this.datastore,
+    );
 
     const api = plugin.register(context);
 
@@ -166,10 +206,23 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions>
   }
 
   public registerTaskHandler<TaskKind extends Extract<keyof TaskMapping, string>>(
+    input: RegisterTaskHandlerSimpleInput<TaskKind, TaskMapping[TaskKind]>,
+  ): RegisterTaskHandlerResponse<TaskKind, TaskMapping>;
+
+  public registerTaskHandler<TaskKind extends Extract<keyof TaskMapping, string>>(
+    input: RegisterTaskHandlerBulkInput<TaskKind, TaskMapping[TaskKind]> &
+      BulkDatastoreRegistrationCheck<TaskMapping, DatastoreOptions, DatastoreImpl>,
+  ): RegisterTaskHandlerResponse<TaskKind, TaskMapping>;
+
+  public registerTaskHandler<TaskKind extends Extract<keyof TaskMapping, string>>(
     input: RegisterTaskHandlerInput<TaskKind, TaskMapping[TaskKind]>,
   ): RegisterTaskHandlerResponse<TaskKind, TaskMapping> {
     if (this.processors.has(input.kind)) {
       throw new Error('Handler for task kind already exists');
+    }
+
+    if (input.processorConfiguration?.type === 'bulk' && !isBulkDatastore(this.datastore)) {
+      throw new Error('Bulk processor requires a datastore that implements BulkDatastore');
     }
 
     const processor = createProcessor({
@@ -177,7 +230,7 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions>
       datastore: this.datastore,
       handler: input.handler,
       backoffStrategyOptions: input.backoffStrategyOptions,
-      configuration: input.processorConfiguration,
+      configuration: input.processorConfiguration satisfies ProcessorConfiguration | undefined,
     });
 
     this.processors.set(input.kind, processor);

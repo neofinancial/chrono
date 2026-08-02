@@ -253,6 +253,269 @@ describe('ChronoMongoDatastore', () => {
     });
   });
 
+  describe('claimMany', () => {
+    const input = {
+      kind: 'test' as const,
+      data: { test: 'test' },
+      priority: 1,
+      when: new Date(Date.now() - 1),
+    };
+
+    test('returns an empty array when no tasks are claimable', async () => {
+      const claimedTasks = await dataStore.claimMany({
+        kind: input.kind,
+        batchSize: 10,
+        claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS,
+      });
+
+      expect(claimedTasks).toEqual([]);
+    });
+
+    test('claims up to batchSize tasks ordered by priority then scheduledAt', async () => {
+      const lowPriorityTask = await dataStore.schedule({
+        ...input,
+        priority: 1,
+        when: new Date(Date.now() - 3_000),
+      });
+      const highPriorityTask = await dataStore.schedule({
+        ...input,
+        priority: 10,
+        when: new Date(Date.now() - 2_000),
+      });
+      await dataStore.schedule({
+        ...input,
+        priority: 1,
+        when: new Date(Date.now() - 1_000),
+      });
+
+      const claimedTasks = await dataStore.claimMany({
+        kind: input.kind,
+        batchSize: 2,
+        claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS,
+      });
+
+      expect(claimedTasks).toHaveLength(2);
+      expect(claimedTasks[0]?.id).toEqual(highPriorityTask.id);
+      expect(claimedTasks[1]?.id).toEqual(lowPriorityTask.id);
+      expect(claimedTasks.every((task) => task.status === TaskStatus.CLAIMED)).toEqual(true);
+
+      const claimedDocuments = await collection
+        .find({ _id: { $in: claimedTasks.map((task) => new ObjectId(task.id)) } })
+        .toArray();
+
+      expect(claimedDocuments.every((document) => document.claimBatchId)).toEqual(true);
+      expect(new Set(claimedDocuments.map((document) => document.claimBatchId)).size).toEqual(1);
+    });
+
+    test('does not set claimBatchId when using single claim', async () => {
+      const task = await dataStore.schedule(input);
+      await dataStore.claim({
+        kind: input.kind,
+        claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS,
+      });
+
+      const taskDocument = await collection.findOne({ _id: new ObjectId(task.id) });
+
+      expect(taskDocument?.claimBatchId).toBeUndefined();
+    });
+
+    test('does not double-claim tasks when competing processes call claimMany concurrently', async () => {
+      const taskCount = 10;
+      const scheduledTasks = await Promise.all(
+        Array.from({ length: taskCount }, (_, index) =>
+          dataStore.schedule({
+            ...input,
+            when: new Date(Date.now() - index - 1),
+          }),
+        ),
+      );
+
+      const claimResults = await Promise.all(
+        Array.from({ length: 5 }, () =>
+          dataStore.claimMany({
+            kind: input.kind,
+            batchSize: taskCount,
+            claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS,
+          }),
+        ),
+      );
+
+      const allClaimedIds = claimResults.flatMap((tasks) => tasks.map((task) => task.id));
+
+      expect(allClaimedIds.length).toEqual(new Set(allClaimedIds).size);
+      expect(new Set(allClaimedIds).size).toEqual(taskCount);
+
+      const claimedDocuments = await collection.find({ status: TaskStatus.CLAIMED }).toArray();
+
+      expect(claimedDocuments).toHaveLength(taskCount);
+      expect(claimedDocuments.map((document) => document._id.toHexString()).sort()).toEqual(
+        scheduledTasks.map((task) => task.id).sort(),
+      );
+    });
+
+    test('splits a small task pool across competing claimMany calls without overlap', async () => {
+      const task1 = await dataStore.schedule({
+        ...input,
+        when: new Date(Date.now() - 2),
+      });
+      const task2 = await dataStore.schedule({
+        ...input,
+        when: new Date(Date.now() - 1),
+      });
+
+      const claimResults = await Promise.all(
+        Array.from({ length: 4 }, () =>
+          dataStore.claimMany({
+            kind: input.kind,
+            batchSize: 2,
+            claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS,
+          }),
+        ),
+      );
+
+      const allClaimedIds = claimResults.flatMap((tasks) => tasks.map((task) => task.id));
+
+      expect(allClaimedIds.sort()).toEqual([task1.id, task2.id].sort());
+      expect(new Set(allClaimedIds).size).toEqual(allClaimedIds.length);
+
+      const nonEmptyBatches = claimResults.filter((tasks) => tasks.length > 0);
+      const claimBatchIds = await Promise.all(
+        nonEmptyBatches.map(async (tasks) => {
+          const document = await collection.findOne({ _id: new ObjectId(tasks[0]?.id) });
+          return document?.claimBatchId;
+        }),
+      );
+
+      expect(new Set(claimBatchIds).size).toEqual(claimBatchIds.length);
+    });
+  });
+
+  describe('completeMany', () => {
+    test('returns empty result for empty input', async () => {
+      await expect(dataStore.completeMany([])).resolves.toEqual({
+        succeeded: [],
+        failed: [],
+      });
+    });
+
+    test('completes claimed tasks in bulk', async () => {
+      const task = await dataStore.schedule({
+        kind: 'test',
+        data: { test: 'test' },
+        priority: 1,
+        when: new Date(Date.now() - 1),
+      });
+
+      const [claimedTask] = await dataStore.claimMany({
+        kind: 'test',
+        batchSize: 1,
+        claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS,
+      });
+
+      expect(claimedTask?.id).toEqual(task.id);
+
+      const result = await dataStore.completeMany([task.id]);
+
+      expect(result.failed).toEqual([]);
+      expect(result.succeeded).toEqual([
+        expect.objectContaining({
+          id: task.id,
+          status: TaskStatus.COMPLETED,
+        }),
+      ]);
+    });
+
+    test('reports tasks that are not in CLAIMED status as failed', async () => {
+      const task = await dataStore.schedule({
+        kind: 'test',
+        data: { test: 'test' },
+        priority: 1,
+        when: new Date(),
+      });
+
+      const result = await dataStore.completeMany([task.id]);
+
+      expect(result.succeeded).toEqual([]);
+      expect(result.failed).toEqual([
+        {
+          taskId: task.id,
+          error: expect.any(Error),
+        },
+      ]);
+    });
+  });
+
+  describe('failMany', () => {
+    test('returns empty result for empty input', async () => {
+      await expect(dataStore.failMany([])).resolves.toEqual({
+        succeeded: [],
+        failed: [],
+      });
+    });
+
+    test('fails claimed tasks in bulk', async () => {
+      const task = await dataStore.schedule({
+        kind: 'test',
+        data: { test: 'test' },
+        priority: 1,
+        when: new Date(Date.now() - 1),
+      });
+
+      await dataStore.claimMany({
+        kind: 'test',
+        batchSize: 1,
+        claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS,
+      });
+
+      const result = await dataStore.failMany([task.id]);
+
+      expect(result.failed).toEqual([]);
+      expect(result.succeeded).toEqual([
+        expect.objectContaining({
+          id: task.id,
+          status: TaskStatus.FAILED,
+        }),
+      ]);
+    });
+  });
+
+  describe('retryMany', () => {
+    test('returns empty result for empty input', async () => {
+      await expect(dataStore.retryMany([])).resolves.toEqual({
+        succeeded: [],
+        failed: [],
+      });
+    });
+
+    test('retries claimed tasks with per-task retryAt values', async () => {
+      const task = await dataStore.schedule({
+        kind: 'test',
+        data: { test: 'test' },
+        priority: 1,
+        when: new Date(Date.now() - 1),
+      });
+
+      await dataStore.claimMany({
+        kind: 'test',
+        batchSize: 1,
+        claimStaleTimeoutMs: TEST_CLAIM_STALE_TIMEOUT_MS,
+      });
+
+      const retryAt = new Date(Date.now() + 60_000);
+      const result = await dataStore.retryMany([{ taskId: task.id, retryAt }]);
+
+      expect(result.failed).toEqual([]);
+      expect(result.succeeded).toEqual([
+        expect.objectContaining({
+          id: task.id,
+          status: TaskStatus.PENDING,
+          scheduledAt: retryAt,
+          retryCount: 1,
+        }),
+      ]);
+    });
+  });
+
   describe('complete', () => {
     test('should allow completing a task before initialize', async () => {
       const task = await dataStore.schedule({
