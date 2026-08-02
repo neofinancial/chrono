@@ -27,7 +27,7 @@ describe('isBulkDatastore', () => {
   } satisfies Datastore<TaskMapping, DatastoreOptions>;
 
   test('returns false for a datastore without bulk methods', () => {
-    expect(isBulkDatastore(baseDatastore)).toBe(false);
+    expect(isBulkDatastore(baseDatastore)).toEqual(false);
   });
 
   test('returns false when only some bulk methods are present', () => {
@@ -37,7 +37,7 @@ describe('isBulkDatastore', () => {
       completeMany: async () => ({ succeeded: [], failed: [] }),
     };
 
-    expect(isBulkDatastore(datastore)).toBe(false);
+    expect(isBulkDatastore(datastore)).toEqual(false);
   });
 
   test('returns true when all bulk methods are present', () => {
@@ -49,6 +49,6 @@ describe('isBulkDatastore', () => {
       failMany: async () => ({ succeeded: [], failed: [] }),
     } satisfies Datastore<TaskMapping, DatastoreOptions> & BulkDatastore<TaskMapping, DatastoreOptions>;
 
-    expect(isBulkDatastore(datastore)).toBe(true);
+    expect(isBulkDatastore(datastore)).toEqual(true);
   });
 });

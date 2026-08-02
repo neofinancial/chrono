@@ -1,8 +1,14 @@
+import { randomUUID } from 'node:crypto';
+
 import {
+  type BulkDatastore,
+  type BulkWriteResult,
+  type ClaimManyInput,
   type ClaimTaskInput,
   type Datastore,
   type DeleteInput,
   type DeleteOptions,
+  type RetryManyItem,
   type ScheduleInput,
   type Task,
   type TaskMappingBase,
@@ -64,10 +70,12 @@ export type MongoDatastoreOptions = {
   session?: ClientSession;
 };
 
-export type TaskDocument<TaskKind, TaskData> = WithId<Omit<Task<TaskKind, TaskData>, 'id'>>;
+export type TaskDocument<TaskKind, TaskData> = WithId<Omit<Task<TaskKind, TaskData>, 'id'>> & {
+  claimBatchId?: string;
+};
 
 export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
-  implements Datastore<TaskMapping, MongoDatastoreOptions>
+  implements Datastore<TaskMapping, MongoDatastoreOptions>, BulkDatastore<TaskMapping, MongoDatastoreOptions>
 {
   private config: ChronoMongoDatastoreConfig;
   private database: Db | undefined;
@@ -223,19 +231,11 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     const now = new Date();
     const collection = await this.collection<TaskKind>();
     const task = await collection.findOneAndUpdate(
-      {
+      this.buildClaimableFilter({
         kind: input.kind,
-        scheduledAt: { $lte: now },
-        $or: [
-          { status: TaskStatus.PENDING },
-          {
-            status: TaskStatus.CLAIMED,
-            claimedAt: {
-              $lte: new Date(now.getTime() - input.claimStaleTimeoutMs),
-            },
-          },
-        ],
-      },
+        now,
+        claimStaleTimeoutMs: input.claimStaleTimeoutMs,
+      }),
       { $set: { status: TaskStatus.CLAIMED, claimedAt: now } },
       {
         sort: { priority: -1, scheduledAt: 1 },
@@ -245,6 +245,217 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     );
 
     return task ? this.toObject(task) : undefined;
+  }
+
+  async claimMany<TaskKind extends Extract<keyof TaskMapping, string>>(
+    input: ClaimManyInput<TaskKind>,
+  ): Promise<Task<TaskKind, TaskMapping[TaskKind]>[]> {
+    const now = new Date();
+    const claimBatchId = randomUUID();
+    const collection = await this.collection<TaskKind>();
+    const claimableFilter = this.buildClaimableFilter({
+      kind: input.kind,
+      now,
+      claimStaleTimeoutMs: input.claimStaleTimeoutMs,
+    });
+
+    const candidates = await collection
+      .find(claimableFilter)
+      .sort({ priority: -1, scheduledAt: 1 })
+      .limit(input.batchSize)
+      .toArray();
+
+    if (candidates.length === 0) {
+      return [];
+    }
+
+    const candidateIds = candidates.map((document) => document._id);
+
+    await collection.updateMany(
+      {
+        ...claimableFilter,
+        _id: { $in: candidateIds },
+      },
+      { $set: { status: TaskStatus.CLAIMED, claimedAt: now, claimBatchId } },
+    );
+
+    const claimedDocuments = await collection
+      .find({
+        _id: { $in: candidateIds },
+        claimBatchId,
+      })
+      .sort({ priority: -1, scheduledAt: 1 })
+      .toArray();
+
+    return claimedDocuments.map((document) => this.toObject(document));
+  }
+
+  async completeMany<TaskKind extends keyof TaskMapping>(
+    taskIds: string[],
+  ): Promise<BulkWriteResult<TaskKind, TaskMapping[TaskKind]>> {
+    if (taskIds.length === 0) {
+      return { succeeded: [], failed: [] };
+    }
+
+    const now = new Date();
+    const collection = await this.collection<TaskKind>();
+    const { objectIds, invalid } = this.parseTaskIds<TaskKind>(taskIds);
+
+    if (objectIds.length === 0) {
+      return { succeeded: [], failed: invalid };
+    }
+
+    const updateResult = await collection.updateMany(
+      {
+        _id: { $in: objectIds },
+        status: TaskStatus.CLAIMED,
+      },
+      {
+        $set: {
+          status: TaskStatus.COMPLETED,
+          completedAt: now,
+          lastExecutedAt: now,
+        },
+      },
+    );
+
+    return this.buildBulkWriteResultFromUpdate({
+      collection,
+      objectIds,
+      invalid,
+      modifiedCount: updateResult.modifiedCount,
+      resultStatus: TaskStatus.COMPLETED,
+    });
+  }
+
+  async retryMany<TaskKind extends keyof TaskMapping>(
+    items: RetryManyItem[],
+  ): Promise<BulkWriteResult<TaskKind, TaskMapping[TaskKind]>> {
+    if (items.length === 0) {
+      return { succeeded: [], failed: [] };
+    }
+
+    const collection = await this.collection<TaskKind>();
+    const operations: { taskId: string; objectId: ObjectId; retryAt: Date }[] = [];
+    const failed: { taskId: string; error: unknown }[] = [];
+
+    for (const item of items) {
+      if (!ObjectId.isValid(item.taskId)) {
+        failed.push({ taskId: item.taskId, error: new Error(`Invalid task ID ${item.taskId}`) });
+        continue;
+      }
+
+      operations.push({
+        taskId: item.taskId,
+        objectId: new ObjectId(item.taskId),
+        retryAt: item.retryAt,
+      });
+    }
+
+    if (operations.length === 0) {
+      return { succeeded: [], failed };
+    }
+
+    const bulkWriteResult = await collection.bulkWrite(
+      operations.map((operation) => ({
+        updateOne: {
+          filter: { _id: operation.objectId, status: TaskStatus.CLAIMED },
+          update: {
+            $set: {
+              status: TaskStatus.PENDING,
+              scheduledAt: operation.retryAt,
+            },
+            $inc: {
+              retryCount: 1,
+            },
+          },
+        },
+      })),
+      { ordered: false },
+    );
+
+    for (const writeError of bulkWriteResult.getWriteErrors()) {
+      const operation = operations[writeError.index];
+      if (operation) {
+        failed.push({ taskId: operation.taskId, error: writeError });
+      }
+    }
+
+    if (bulkWriteResult.modifiedCount === operations.length && bulkWriteResult.getWriteErrorCount() === 0) {
+      const succeededDocuments = await collection
+        .find({
+          _id: { $in: operations.map((operation) => operation.objectId) },
+        })
+        .toArray();
+
+      return {
+        succeeded: succeededDocuments.map((document) => this.toObject(document)),
+        failed,
+      };
+    }
+
+    const succeededDocuments = await collection
+      .find({
+        _id: { $in: operations.map((operation) => operation.objectId) },
+        status: TaskStatus.PENDING,
+      })
+      .toArray();
+
+    const succeededIds = new Set(succeededDocuments.map((document) => document._id.toHexString()));
+    const failedTaskIds = new Set(failed.map((failure) => failure.taskId));
+
+    for (const operation of operations) {
+      if (failedTaskIds.has(operation.taskId) || succeededIds.has(operation.taskId)) {
+        continue;
+      }
+
+      failed.push({
+        taskId: operation.taskId,
+        error: new Error(`Task with ID ${operation.taskId} not found or not in CLAIMED status`),
+      });
+    }
+
+    return {
+      succeeded: succeededDocuments.map((document) => this.toObject(document)),
+      failed,
+    };
+  }
+
+  async failMany<TaskKind extends keyof TaskMapping>(
+    taskIds: string[],
+  ): Promise<BulkWriteResult<TaskKind, TaskMapping[TaskKind]>> {
+    if (taskIds.length === 0) {
+      return { succeeded: [], failed: [] };
+    }
+
+    const now = new Date();
+    const collection = await this.collection<TaskKind>();
+    const { objectIds, invalid } = this.parseTaskIds<TaskKind>(taskIds);
+
+    if (objectIds.length === 0) {
+      return { succeeded: [], failed: invalid };
+    }
+
+    const updateResult = await collection.updateMany(
+      {
+        _id: { $in: objectIds },
+        status: TaskStatus.CLAIMED,
+      },
+      {
+        $set: {
+          status: TaskStatus.FAILED,
+          lastExecutedAt: now,
+        },
+      },
+    );
+
+    return this.buildBulkWriteResultFromUpdate({
+      collection,
+      objectIds,
+      invalid,
+      modifiedCount: updateResult.modifiedCount,
+      resultStatus: TaskStatus.FAILED,
+    });
   }
 
   async retry<TaskKind extends keyof TaskMapping>(
@@ -289,6 +500,90 @@ export class ChronoMongoDatastore<TaskMapping extends TaskMappingBase>
     });
 
     return this.toObject(task);
+  }
+
+  private buildClaimableFilter<TaskKind extends Extract<keyof TaskMapping, string>>(input: {
+    kind: TaskKind;
+    now: Date;
+    claimStaleTimeoutMs: number;
+  }) {
+    return {
+      kind: input.kind,
+      scheduledAt: { $lte: input.now },
+      $or: [
+        { status: TaskStatus.PENDING },
+        {
+          status: TaskStatus.CLAIMED,
+          claimedAt: {
+            $lte: new Date(input.now.getTime() - input.claimStaleTimeoutMs),
+          },
+        },
+      ],
+    };
+  }
+
+  private async buildBulkWriteResultFromUpdate<TaskKind extends keyof TaskMapping>(input: {
+    collection: Collection<TaskDocument<TaskKind, TaskMapping[TaskKind]>>;
+    objectIds: ObjectId[];
+    invalid: BulkWriteResult<TaskKind, TaskMapping[TaskKind]>['failed'];
+    modifiedCount: number;
+    resultStatus: TaskStatus;
+  }): Promise<BulkWriteResult<TaskKind, TaskMapping[TaskKind]>> {
+    if (input.modifiedCount === input.objectIds.length) {
+      const succeededDocuments = await input.collection
+        .find({
+          _id: { $in: input.objectIds },
+        })
+        .toArray();
+
+      return {
+        succeeded: succeededDocuments.map((document) => this.toObject(document)),
+        failed: input.invalid,
+      };
+    }
+
+    const succeededDocuments = await input.collection
+      .find({
+        _id: { $in: input.objectIds },
+        status: input.resultStatus,
+      })
+      .toArray();
+
+    const succeededIds = new Set(succeededDocuments.map((document) => document._id.toHexString()));
+    const notClaimedFailed = input.objectIds
+      .filter((objectId) => !succeededIds.has(objectId.toHexString()))
+      .map((objectId) => {
+        const taskId = objectId.toHexString();
+        return {
+          taskId,
+          error: new Error(`Task with ID ${taskId} not found or not in CLAIMED status`),
+        };
+      });
+
+    return {
+      succeeded: succeededDocuments.map((document) => this.toObject(document)),
+      failed: [...input.invalid, ...notClaimedFailed],
+    };
+  }
+
+  private parseTaskIds<TaskKind extends keyof TaskMapping>(
+    taskIds: string[],
+  ): {
+    objectIds: ObjectId[];
+    invalid: BulkWriteResult<TaskKind, TaskMapping[TaskKind]>['failed'];
+  } {
+    const objectIds: ObjectId[] = [];
+    const invalid: BulkWriteResult<TaskKind, TaskMapping[TaskKind]>['failed'] = [];
+
+    for (const taskId of taskIds) {
+      if (ObjectId.isValid(taskId)) {
+        objectIds.push(new ObjectId(taskId));
+      } else {
+        invalid.push({ taskId, error: new Error(`Invalid task ID ${taskId}`) });
+      }
+    }
+
+    return { objectIds, invalid };
   }
 
   private async updateOrThrow<TaskKind extends keyof TaskMapping>(
