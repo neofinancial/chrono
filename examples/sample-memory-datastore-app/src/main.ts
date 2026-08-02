@@ -18,7 +18,7 @@ type TaskMapping = {
  * Consumers only need `ChronoHandlerRegistrar` -- they never see `use()` or
  * `scheduleTask()`, which keeps the type covariant in TaskMapping.
  */
-function registerHandlers(registrar: ChronoHandlerRegistrar<TaskMapping>) {
+function registerHandlers(registrar: ChronoHandlerRegistrar<TaskMapping, DatastoreOptions>) {
   const processor1 = registrar.registerTaskHandler({
     kind: 'async-messaging',
     handler: async (task) => {
