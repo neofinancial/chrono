@@ -1,4 +1,11 @@
 export {
+  type BulkDatastore,
+  type BulkWriteResult,
+  type ClaimManyInput,
+  isBulkDatastore,
+  type RetryManyItem,
+} from './bulk-datastore';
+export {
   Chrono,
   type ChronoHandlerRegistrar,
   type ChronoTaskScheduler,
