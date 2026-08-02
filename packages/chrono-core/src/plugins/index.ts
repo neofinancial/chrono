@@ -1,4 +1,5 @@
 import type { TaskMappingBase } from '../chrono';
+import type { Datastore } from '../datastore';
 import type { PluginRegistrationContext } from './registration-context';
 
 export type { PluginLifecycleContext } from './lifecycle-context';
@@ -9,11 +10,13 @@ export type { PluginRegistrationContext } from './registration-context';
  * @template TaskMapping - The task type mapping for the Chrono instance
  * @template DatastoreOptions - The datastore options type for the Chrono instance
  * @template PluginAPI - The PluginAPI type returned by the plugin's register function (defaults to void)
+ * @template DatastoreImpl - The concrete datastore implementation used by the Chrono instance
  */
 export interface ChronoPlugin<
   TaskMapping extends TaskMappingBase = TaskMappingBase,
   DatastoreOptions = unknown,
   PluginAPI = void,
+  DatastoreImpl extends Datastore<TaskMapping, DatastoreOptions> = Datastore<TaskMapping, DatastoreOptions>,
 > {
   /** Unique plugin identifier */
   name: string;
@@ -24,5 +27,5 @@ export interface ChronoPlugin<
    * @param context - The plugin registration context providing access to Chrono methods
    * @returns The plugin's public PluginAPI (if any)
    */
-  register(context: PluginRegistrationContext<TaskMapping, DatastoreOptions>): PluginAPI;
+  register(context: PluginRegistrationContext<TaskMapping, DatastoreOptions, DatastoreImpl>): PluginAPI;
 }
