@@ -8,7 +8,7 @@ RUN corepack enable
 WORKDIR /app
 COPY . .
 
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --ignore-scripts
 RUN pnpm --filter @neofinancial/chrono build \
   && pnpm --filter @neofinancial/chrono-mongo-datastore build \
   && pnpm --filter chrono-load-tester build
@@ -20,5 +20,7 @@ COPY --from=build /app /app
 
 WORKDIR /app
 RUN chmod +x examples/chrono-load-tester/entrypoint.sh
+
+USER 999:999
 
 ENTRYPOINT ["examples/chrono-load-tester/entrypoint.sh"]

@@ -76,7 +76,7 @@ function loadConfig(): Config {
     concurrencyPerWorker: integerFromEnvironment('CONCURRENCY_PER_WORKER', DEFAULTS.concurrencyPerWorker, 1, 100),
     maxDelayMs: integerFromEnvironment('MAX_DELAY_MS', DEFAULTS.maxDelayMs, 0, 30_000),
     retryPercent: integerFromEnvironment('RETRY_PERCENT', DEFAULTS.retryPercent, 0, 100),
-    seed: integerFromEnvironment('SEED', DEFAULTS.seed, 1, 2_147_483_647),
+    seed: integerFromEnvironment('SEED', DEFAULTS.seed, 1, 2_147_483_646),
     timeoutMs: integerFromEnvironment('TIMEOUT_MS', DEFAULTS.timeoutMs, 1_000, 3_600_000),
   };
 }

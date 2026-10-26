@@ -12,8 +12,7 @@ It also runs two deterministic regression scenarios:
 - repeated schedules with the same idempotency key must create one task and one handler effect
 - ready tasks must execute in descending priority order
 
-Both regression scenarios fail on Chrono `master` until scheduling passes `idempotencyKey` and `priority`
-to the datastore.
+The scenarios guard the `Chrono.scheduleTask` passthrough of `idempotencyKey` and `priority` to the datastore.
 
 ## Run in Docker
 
