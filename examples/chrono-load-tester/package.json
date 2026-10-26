@@ -1,0 +1,19 @@
+{
+  "name": "chrono-load-tester",
+  "version": "1.0.0",
+  "description": "Standalone MongoDB load tester for Chrono",
+  "private": true,
+  "type": "module",
+  "main": "build/main.js",
+  "scripts": {
+    "clean": "rimraf ./build",
+    "build": "tsc -p ./tsconfig.json",
+    "start": "node build/main.js",
+    "typecheck": "tsc -p ./tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@neofinancial/chrono": "workspace:*",
+    "@neofinancial/chrono-mongo-datastore": "workspace:*",
+    "mongodb": "^6"
+  }
+}
