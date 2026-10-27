@@ -5,4 +5,7 @@ packages/**/build
 
 examples/**/tsconfig.tsbuildinfo
 examples/**/build
+utils/**/tsconfig.tsbuildinfo
+utils/**/build
+chrono-load-report*.log
 .DS_Store

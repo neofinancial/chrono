@@ -1,0 +1,6 @@
+.git
+.github
+.husky
+**/build
+**/coverage
+**/node_modules

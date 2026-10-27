@@ -57,12 +57,18 @@ describe('Chrono', () => {
 
     test('calls datastore.schedule successfully', async () => {
       const task = taskFactory.build();
+      const datastoreOptions = { transaction: 'test' };
+      const priority = 10;
+      const idempotencyKey = 'test-idempotency-key';
       mockDatastore.schedule.mockResolvedValueOnce(task);
 
       await chrono.scheduleTask({
         when: task.scheduledAt,
         kind: task.kind,
         data: task.data,
+        priority,
+        idempotencyKey,
+        datastoreOptions,
       });
 
       expect(mockDatastore.schedule).toHaveBeenCalledOnce();
@@ -70,6 +76,9 @@ describe('Chrono', () => {
         when: task.scheduledAt,
         kind: task.kind,
         data: task.data,
+        priority,
+        idempotencyKey,
+        datastoreOptions,
       });
     });
   });

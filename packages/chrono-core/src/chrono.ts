@@ -151,6 +151,8 @@ export class Chrono<TaskMapping extends TaskMappingBase, DatastoreOptions>
       when: input.when,
       kind: input.kind,
       data: input.data,
+      priority: input.priority,
+      idempotencyKey: input.idempotencyKey,
       datastoreOptions: input.datastoreOptions,
     });
 

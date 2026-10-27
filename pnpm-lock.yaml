@@ -72,6 +72,18 @@ importers:
         specifier: ^10.1.4
         version: 10.1.4
 
+  utils/chrono-load-tester:
+    dependencies:
+      '@neofinancial/chrono':
+        specifier: workspace:*
+        version: link:../../packages/chrono-core
+      '@neofinancial/chrono-mongo-datastore':
+        specifier: workspace:*
+        version: link:../../packages/chrono-mongo-datastore
+      mongodb:
+        specifier: ^6
+        version: 6.15.0
+
 packages:
 
   '@babel/generator@8.0.0-rc.3':

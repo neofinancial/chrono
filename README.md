@@ -55,6 +55,20 @@ See the [@neofinancial/chrono README](packages/chrono-core) for the full API, co
 
 For MongoDB usage, see the [@neofinancial/chrono-mongo-datastore README](packages/chrono-mongo-datastore).
 
+## Utilities
+
+The [Chrono load tester](utils/chrono-load-tester) runs a seeded concurrent workload against the current
+Chrono and MongoDB datastore packages. Its self-contained image starts MongoDB and requires no external
+services at runtime.
+
+```sh
+docker build -f utils/chrono-load-tester/Dockerfile -t chrono-load-tester .
+docker run --rm --network none chrono-load-tester load
+```
+
+See the [load tester README](utils/chrono-load-tester/README.md) for selectable scenarios, percentile metrics,
+configuration, and larger runs.
+
 ## Development
 
 ### Prerequisites
