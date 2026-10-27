@@ -23,4 +23,4 @@ stop_mongo() {
 trap stop_mongo EXIT INT TERM
 
 export MONGO_URI="mongodb://127.0.0.1:$mongo_port"
-node examples/chrono-load-tester/build/main.js
+node utils/chrono-load-tester/build/main.js "$@"

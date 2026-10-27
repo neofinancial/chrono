@@ -14,12 +14,28 @@ It also runs two deterministic regression scenarios:
 
 The scenarios guard the `Chrono.scheduleTask` passthrough of `idempotencyKey` and `priority` to the datastore.
 
+## Scenarios
+
+Pass a scenario name after the image. Omitting it defaults to `all`.
+
+```sh
+docker run --rm --network none chrono-load-tester load
+docker run --rm --network none chrono-load-tester idempotency
+docker run --rm --network none chrono-load-tester priority
+docker run --rm --network none chrono-load-tester all
+```
+
+- `load` runs the seeded concurrent workload with injected transient failures
+- `idempotency` schedules each key repeatedly and verifies one task and one handler effect
+- `priority` verifies that ready tasks are claimed in descending priority order
+- `all` runs every scenario
+
 ## Run in Docker
 
 From the repository root:
 
 ```sh
-docker build -f examples/chrono-load-tester/Dockerfile -t chrono-load-tester .
+docker build -f utils/chrono-load-tester/Dockerfile -t chrono-load-tester .
 docker run --rm chrono-load-tester
 ```
 
@@ -40,10 +56,22 @@ docker run --rm \
   -e MAX_DELAY_MS=50 \
   -e RETRY_PERCENT=10 \
   -e SEED=42 \
-  chrono-load-tester
+  chrono-load-tester load
 ```
 
 The image contains its MongoDB binary and does not need network access at runtime.
+
+## Report
+
+The final JSON report includes correctness violations, throughput, and latency summaries in milliseconds.
+Each latency summary reports `count`, `min`, `mean`, `p50`, `p95`, `p99`, and `max`.
+
+Scenario `latenciesMs` contains database-neutral timings for Chrono datastore operations and fake handlers.
+These are the primary metrics for comparing datastore implementations. `mongoLatenciesMs` contains MongoDB
+driver command timings, such as `command.findAndModify`, for Mongo-specific diagnosis.
+
+Percentiles use Node's built-in histogram implementation, so no metrics dependency is required. MongoDB's
+profiler can provide deeper query analysis when needed; it is intentionally not required for a normal run.
 
 ## Configuration
 
@@ -64,5 +92,5 @@ pnpm install
 pnpm --filter @neofinancial/chrono build
 pnpm --filter @neofinancial/chrono-mongo-datastore build
 pnpm --filter chrono-load-tester build
-MONGO_URI=mongodb://127.0.0.1:27017 pnpm --filter chrono-load-tester start
+MONGO_URI=mongodb://127.0.0.1:27017 pnpm --filter chrono-load-tester start -- load
 ```

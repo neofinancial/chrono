@@ -19,8 +19,8 @@ COPY --from=build /usr/local /usr/local
 COPY --from=build /app /app
 
 WORKDIR /app
-RUN chmod +x examples/chrono-load-tester/entrypoint.sh
+RUN chmod +x utils/chrono-load-tester/entrypoint.sh
 
 USER 999:999
 
-ENTRYPOINT ["examples/chrono-load-tester/entrypoint.sh"]
+ENTRYPOINT ["utils/chrono-load-tester/entrypoint.sh"]

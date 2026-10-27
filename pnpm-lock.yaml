@@ -42,18 +42,6 @@ importers:
         specifier: ^4.0.0
         version: 4.0.0(typescript@5.9.3)(vitest@4.1.4(@types/node@20.19.31)(vite@7.3.1(@types/node@20.19.31)(jiti@2.6.1)(yaml@2.8.2)))
 
-  examples/chrono-load-tester:
-    dependencies:
-      '@neofinancial/chrono':
-        specifier: workspace:*
-        version: link:../../packages/chrono-core
-      '@neofinancial/chrono-mongo-datastore':
-        specifier: workspace:*
-        version: link:../../packages/chrono-mongo-datastore
-      mongodb:
-        specifier: ^6
-        version: 6.15.0
-
   examples/sample-memory-datastore-app:
     dependencies:
       '@neofinancial/chrono':
@@ -83,6 +71,18 @@ importers:
       mongodb-memory-server:
         specifier: ^10.1.4
         version: 10.1.4
+
+  utils/chrono-load-tester:
+    dependencies:
+      '@neofinancial/chrono':
+        specifier: workspace:*
+        version: link:../../packages/chrono-core
+      '@neofinancial/chrono-mongo-datastore':
+        specifier: workspace:*
+        version: link:../../packages/chrono-mongo-datastore
+      mongodb:
+        specifier: ^6
+        version: 6.15.0
 
 packages:
 

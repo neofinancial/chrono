@@ -1,7 +1,17 @@
 import { setTimeout as sleep } from 'node:timers/promises';
-import { Chrono, ProcessorEvents, type RegisterTaskHandlerResponse, type Task } from '@neofinancial/chrono';
+import { parseArgs } from 'node:util';
+import {
+  Chrono,
+  type Datastore,
+  ProcessorEvents,
+  type RegisterTaskHandlerResponse,
+  type Task,
+} from '@neofinancial/chrono';
 import { ChronoMongoDatastore, type MongoDatastoreOptions } from '@neofinancial/chrono-mongo-datastore';
 import { MongoClient } from 'mongodb';
+
+import { LatencyMetrics } from './latency-metrics.js';
+import { TimedDatastore } from './timed-datastore.js';
 
 type LoadTaskData = {
   ordinal: number;
@@ -44,6 +54,9 @@ type Metrics = {
   completionErrors: number;
   processingErrors: number;
 };
+
+const SCENARIO_NAMES = ['load', 'idempotency', 'priority'] as const;
+type ScenarioName = (typeof SCENARIO_NAMES)[number];
 
 const DEFAULTS: Config = {
   taskCount: 1_000,
@@ -183,7 +196,11 @@ async function scheduleTasks(
   return taskIds;
 }
 
-async function runIdempotencyScenario(datastore: ChronoMongoDatastore<LoadTaskMapping>, timeoutMs: number) {
+async function runIdempotencyScenario(
+  datastore: Datastore<LoadTaskMapping, MongoDatastoreOptions>,
+  timeoutMs: number,
+  latencyMetrics: LatencyMetrics,
+) {
   const keyCount = 100;
   const schedulesPerKey = 5;
   const scheduler = new Chrono<LoadTaskMapping, MongoDatastoreOptions>(datastore);
@@ -204,7 +221,9 @@ async function runIdempotencyScenario(datastore: ChronoMongoDatastore<LoadTaskMa
   const processor = worker.registerTaskHandler({
     kind: 'idempotency',
     handler: async (task) => {
-      effects.set(task.data.logicalId, (effects.get(task.data.logicalId) ?? 0) + 1);
+      await latencyMetrics.measure('handler', async () => {
+        effects.set(task.data.logicalId, (effects.get(task.data.logicalId) ?? 0) + 1);
+      });
     },
     processorConfiguration: processorConfiguration(16),
   });
@@ -233,11 +252,16 @@ async function runIdempotencyScenario(datastore: ChronoMongoDatastore<LoadTaskMa
     idempotencyKeys: keyCount,
     uniqueTaskIds: uniqueTaskIds.size,
     handlerEffects: completed,
+    latenciesMs: latencyMetrics.summarize(),
     violations,
   };
 }
 
-async function runPriorityScenario(datastore: ChronoMongoDatastore<LoadTaskMapping>, timeoutMs: number) {
+async function runPriorityScenario(
+  datastore: Datastore<LoadTaskMapping, MongoDatastoreOptions>,
+  timeoutMs: number,
+  latencyMetrics: LatencyMetrics,
+) {
   const expectedOrder = [5, 4, 3, 2, 1];
   const schedulingOrder = [1, 2, 3, 4, 5];
   const baseScheduleTime = Date.now() - 10_000;
@@ -259,7 +283,9 @@ async function runPriorityScenario(datastore: ChronoMongoDatastore<LoadTaskMappi
   const processor = worker.registerTaskHandler({
     kind: 'priority',
     handler: async (task) => {
-      observedOrder.push(task.data.priority);
+      await latencyMetrics.measure('handler', async () => {
+        observedOrder.push(task.data.priority);
+      });
     },
     processorConfiguration: processorConfiguration(1),
   });
@@ -284,12 +310,16 @@ async function runPriorityScenario(datastore: ChronoMongoDatastore<LoadTaskMappi
     expectedOrder,
     observedOrder,
     storedPriorities: scheduled.map((task) => task.priority ?? null),
+    latenciesMs: latencyMetrics.summarize(),
     violations,
   };
 }
 
-async function run(): Promise<void> {
-  const config = loadConfig();
+async function runLoadScenario(
+  datastore: Datastore<LoadTaskMapping, MongoDatastoreOptions>,
+  config: Config,
+  latencyMetrics: LatencyMetrics,
+) {
   const tasks = createTasks(config);
   const expectedRetries = tasks.reduce((total, task) => total + task.failuresBeforeSuccess, 0);
   const attempts = new Map<number, number>();
@@ -306,36 +336,27 @@ async function run(): Promise<void> {
     completionErrors: 0,
     processingErrors: 0,
   };
-
-  console.log(JSON.stringify({ event: 'load-test-start', config, expectedRetries }));
-
-  const client = new MongoClient(process.env.MONGO_URI ?? 'mongodb://127.0.0.1:27017');
   const workers: Array<Chrono<LoadTaskMapping, MongoDatastoreOptions>> = [];
   const startedAt = Date.now();
 
   try {
-    await client.connect();
-    const datastore = new ChronoMongoDatastore<LoadTaskMapping>({
-      collectionName: 'chrono-load-test-tasks',
-      uninitializedDatastoreBehavior: 'throw',
-    });
-    await datastore.initialize(client.db('chronoLoadTest'));
-
     const handler = async (task: Task<'load', LoadTaskData>): Promise<void> => {
-      metrics.handlerCalls += 1;
-      metrics.activeHandlers += 1;
-      metrics.maxParallelHandlers = Math.max(metrics.maxParallelHandlers, metrics.activeHandlers);
-      attempts.set(task.data.ordinal, (attempts.get(task.data.ordinal) ?? 0) + 1);
+      await latencyMetrics.measure('handler', async () => {
+        metrics.handlerCalls += 1;
+        metrics.activeHandlers += 1;
+        metrics.maxParallelHandlers = Math.max(metrics.maxParallelHandlers, metrics.activeHandlers);
+        attempts.set(task.data.ordinal, (attempts.get(task.data.ordinal) ?? 0) + 1);
 
-      try {
-        await sleep(task.data.delayMs);
-        if (task.retryCount < task.data.failuresBeforeSuccess) {
-          throw new Error(`injected transient failure for task ${task.data.ordinal}`);
+        try {
+          await sleep(task.data.delayMs);
+          if (task.retryCount < task.data.failuresBeforeSuccess) {
+            throw new Error(`injected transient failure for task ${task.data.ordinal}`);
+          }
+          successes.set(task.data.ordinal, (successes.get(task.data.ordinal) ?? 0) + 1);
+        } finally {
+          metrics.activeHandlers -= 1;
         }
-        successes.set(task.data.ordinal, (successes.get(task.data.ordinal) ?? 0) + 1);
-      } finally {
-        metrics.activeHandlers -= 1;
-      }
+      });
     };
 
     for (let worker = 0; worker < config.workerCount; worker += 1) {
@@ -393,7 +414,7 @@ async function run(): Promise<void> {
     violations.push(...errors);
 
     const durationMs = Date.now() - startedAt;
-    const loadScenario = {
+    return {
       passed: violations.length === 0,
       expectedRetries,
       metrics: {
@@ -401,27 +422,97 @@ async function run(): Promise<void> {
         durationMs,
         tasksPerSecond: Math.round((config.taskCount / durationMs) * 1_000),
       },
+      latenciesMs: latencyMetrics.summarize(),
       violations,
     };
-    const idempotencyScenario = await runIdempotencyScenario(datastore, config.timeoutMs);
-    const priorityScenario = await runPriorityScenario(datastore, config.timeoutMs);
-    const result = {
-      event: 'load-test-result',
-      passed: loadScenario.passed && idempotencyScenario.passed && priorityScenario.passed,
-      config,
-      scenarios: {
-        load: loadScenario,
-        idempotency: idempotencyScenario,
-        priority: priorityScenario,
-      },
-    };
-    console.log(JSON.stringify(result, null, 2));
-
-    if (!result.passed) {
-      process.exitCode = 1;
-    }
   } finally {
     await Promise.all(workers.map((worker) => worker.stop()));
+  }
+}
+
+function selectedScenarios(): ScenarioName[] | undefined {
+  const { values, positionals } = parseArgs({
+    args: process.argv.slice(2),
+    options: {
+      help: { type: 'boolean', short: 'h' },
+      scenario: { type: 'string', short: 's' },
+    },
+    allowPositionals: true,
+    strict: true,
+  });
+
+  if (values.help) {
+    console.log('Usage: chrono-load-tester [load|idempotency|priority|all]');
+    console.log('       chrono-load-tester --scenario <name>');
+    return undefined;
+  }
+  if (positionals.length > 1 || (positionals.length === 1 && values.scenario)) {
+    throw new Error('provide one scenario using either a positional argument or --scenario');
+  }
+
+  const selected = positionals[0] ?? values.scenario ?? 'all';
+  if (selected === 'all') {
+    return [...SCENARIO_NAMES];
+  }
+  if (!SCENARIO_NAMES.includes(selected as ScenarioName)) {
+    throw new Error(`unknown scenario "${selected}"; expected ${[...SCENARIO_NAMES, 'all'].join(', ')}`);
+  }
+  return [selected as ScenarioName];
+}
+
+async function run(): Promise<void> {
+  const scenariosToRun = selectedScenarios();
+  if (!scenariosToRun) {
+    return;
+  }
+
+  const config = loadConfig();
+  const mongoLatencies = new LatencyMetrics();
+  const client = new MongoClient(process.env.MONGO_URI ?? 'mongodb://127.0.0.1:27017', {
+    monitorCommands: true,
+  });
+  client.on('commandSucceeded', (event) => {
+    mongoLatencies.record(`command.${event.commandName}`, event.duration);
+  });
+  client.on('commandFailed', (event) => {
+    mongoLatencies.record(`command.${event.commandName}.failed`, event.duration);
+  });
+
+  console.log(JSON.stringify({ event: 'load-test-start', scenarios: scenariosToRun, config }));
+
+  try {
+    await client.connect();
+    const rawDatastore = new ChronoMongoDatastore<LoadTaskMapping>({
+      collectionName: 'chrono-load-test-tasks',
+      uninitializedDatastoreBehavior: 'throw',
+    });
+    const database = client.db('chronoLoadTest');
+    await rawDatastore.initialize(database);
+    await database.collection('chrono-load-test-tasks').deleteMany({});
+
+    const scenarioResults: Record<string, { passed: boolean }> = {};
+    for (const scenario of scenariosToRun) {
+      const latencies = new LatencyMetrics();
+      const datastore = new TimedDatastore<LoadTaskMapping, MongoDatastoreOptions>(rawDatastore, latencies);
+      if (scenario === 'load') {
+        scenarioResults.load = await runLoadScenario(datastore, config, latencies);
+      } else if (scenario === 'idempotency') {
+        scenarioResults.idempotency = await runIdempotencyScenario(datastore, config.timeoutMs, latencies);
+      } else {
+        scenarioResults.priority = await runPriorityScenario(datastore, config.timeoutMs, latencies);
+      }
+    }
+
+    const result = {
+      event: 'load-test-result',
+      passed: Object.values(scenarioResults).every((scenario) => scenario.passed),
+      config,
+      scenarios: scenarioResults,
+      mongoLatenciesMs: mongoLatencies.summarize(),
+    };
+    console.log(JSON.stringify(result, null, 2));
+    if (!result.passed) process.exitCode = 1;
+  } finally {
     await client.close();
   }
 }
