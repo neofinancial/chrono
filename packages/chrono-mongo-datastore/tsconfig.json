@@ -1,10 +1,4 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "baseUrl": "${configDir}/src",
-    "paths": {
-      "*": ["*", "node_modules/*", "src/*"]
-    }
-  },
   "include": ["src/**/*"]
 }

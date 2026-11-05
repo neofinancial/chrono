@@ -81,16 +81,23 @@ const chrono = new Chrono<TaskMapping, MongoDatastoreOptions>(datastore);
 
 // Register task handlers
 chrono.registerTaskHandler({
+  kind: "process-payment",
+  handler: async (task) => {
+    console.log(`Processing $${task.data.amount} for user ${task.data.userId}`);
+  },
+});
+
+// Optional: use the bulk processor for high-throughput task kinds
+chrono.registerTaskHandler({
   kind: "send-email",
   handler: async (task) => {
     console.log(`Sending email to ${task.data.to}: "${task.data.subject}"`);
   },
-});
-
-chrono.registerTaskHandler({
-  kind: "process-payment",
-  handler: async (task) => {
-    console.log(`Processing $${task.data.amount} for user ${task.data.userId}`);
+  processorConfiguration: {
+    type: "bulk",
+    batchSize: 50,
+    batchIntervalMs: 1_000,
+    taskHandlerTimeoutMs: 30_000,
   },
 });
 
@@ -257,7 +264,7 @@ Returns the database connection. If the datastore is not yet initialized, behavi
 - `'queue'`: returns a promise that resolves when `initialize()` is called
 - `'throw'`: throws an error immediately
 
-All other methods (`schedule`, `delete`, `claim`, `retry`, `complete`, `fail`) implement the `Datastore` interface from `@neofinancial/chrono`. See the [chrono documentation](https://www.npmjs.com/package/@neofinancial/chrono) for details.
+All other methods (`schedule`, `delete`, `claim`, `retry`, `complete`, `fail`, `claimMany`, `completeMany`, `retryMany`, `failMany`) implement the `Datastore` and `BulkDatastore` interfaces from `@neofinancial/chrono`. See the [chrono documentation](https://www.npmjs.com/package/@neofinancial/chrono) for details.
 
 ### Exported Types
 
